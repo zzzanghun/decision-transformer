@@ -15,6 +15,7 @@ class Trainer:
         self.scheduler = scheduler
         self.eval_fns = [] if eval_fns is None else eval_fns
         self.diagnostics = dict()
+        self.train_num = 0
 
         self.start_time = time.time()
 
@@ -36,14 +37,14 @@ class Trainer:
 
         eval_start = time.time()
 
-        self.model.eval()
-        for eval_fn in self.eval_fns:
-            outputs = eval_fn(self.model)
-            for k, v in outputs.items():
-                logs[f'evaluation/{k}'] = v
+        # self.model.eval()
+        # for eval_fn in self.eval_fns:
+        #     outputs = eval_fn(self.model)
+        #     for k, v in outputs.items():
+        #         logs[f'evaluation/{k}'] = v
 
         logs['time/total'] = time.time() - self.start_time
-        logs['time/evaluation'] = time.time() - eval_start
+        # logs['time/evaluation'] = time.time() - eval_start
         logs['training/train_loss_mean'] = np.mean(train_losses)
         logs['training/train_loss_std'] = np.std(train_losses)
 
@@ -63,7 +64,7 @@ class Trainer:
         state_target, action_target, reward_target = torch.clone(states), torch.clone(actions), torch.clone(rewards)
 
         state_preds, action_preds, reward_preds = self.model.forward(
-            states, actions, rewards, masks=None, attention_mask=attention_mask, target_return=returns,
+            states, actions, rewards, masks=None, attention_mask=attention_mask, target_return=returns
         )
 
         # note: currently indexing & masking is not fully correct

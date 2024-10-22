@@ -22,6 +22,7 @@ class DecisionTransformer(TrajectoryModel):
             max_length=None,
             max_ep_len=4096,
             action_tanh=True,
+            odom_dim=None,
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -33,25 +34,40 @@ class DecisionTransformer(TrajectoryModel):
             **kwargs
         )
 
+        self.odom_dim = odom_dim
+
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
         self.transformer = GPT2Model(config)
 
         self.embed_timestep = nn.Embedding(max_ep_len, hidden_size)
         self.embed_return = torch.nn.Linear(1, hidden_size)
-        self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
+
+        if isinstance(self.state_dim, tuple):
+            self.before_concat_hidden_size = int(hidden_size / 2)
+            self.embed_state = nn.Sequential(
+                nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
+                nn.ReLU(),
+                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+                nn.ReLU(),
+                nn.Flatten(),
+                nn.Linear(in_features=64 * 9 * 9, out_features=self.before_concat_hidden_size)
+            )
+            self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
+        else:
+            self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
         self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)
 
         self.embed_ln = nn.LayerNorm(hidden_size)
 
         # note: we don't predict states or returns for the paper
-        self.predict_state = torch.nn.Linear(hidden_size, self.state_dim)
+        self.predict_state = torch.nn.Linear(hidden_size, 1)
         self.predict_action = nn.Sequential(
             *([nn.Linear(hidden_size, self.act_dim)] + ([nn.Tanh()] if action_tanh else []))
         )
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
-    def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None):
+    def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
 
         batch_size, seq_length = states.shape[0], states.shape[1]
 
@@ -60,7 +76,16 @@ class DecisionTransformer(TrajectoryModel):
             attention_mask = torch.ones((batch_size, seq_length), dtype=torch.long)
 
         # embed each modality with a different head
-        state_embeddings = self.embed_state(states)
+        if isinstance(self.state_dim, tuple):
+            obstacles = states.view(-1, *self.state_dim)
+            obstacles_embeddings = self.embed_state(obstacles)
+            obstacles_embeddings = obstacles_embeddings.view(batch_size, seq_length, self.before_concat_hidden_size)
+
+            odom_embeddings = self.embed_odom(odom)
+            state_embeddings = torch.cat((obstacles_embeddings, odom_embeddings), dim=-1)
+        else:
+            state_embeddings = self.embed_state(states)
+        
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
         time_embeddings = self.embed_timestep(timesteps)

@@ -85,7 +85,6 @@ def evaluate_episode_rtg(
     state = env.reset()
     if mode == 'noise':
         state = state + np.random.normal(0, 0.1, size=state.shape)
-
     # we keep all the histories on the device
     # note that the latest action and reward will be "padding"
     states = torch.from_numpy(state).reshape(1, state_dim).to(device=device, dtype=torch.float32)
@@ -104,6 +103,8 @@ def evaluate_episode_rtg(
         # add padding
         actions = torch.cat([actions, torch.zeros((1, act_dim), device=device)], dim=0)
         rewards = torch.cat([rewards, torch.zeros(1, device=device)])
+
+        print(actions.shape, states.shape, "@!#@#!#@!@!#@#!#")
 
         action = model.get_action(
             (states.to(dtype=torch.float32) - state_mean) / state_std,

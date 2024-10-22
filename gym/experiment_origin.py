@@ -33,8 +33,6 @@ def experiment(
     device = variant.get('device', 'cuda')
     log_to_wandb = variant.get('log_to_wandb', False)
     get_batch_random = variant.get('get_batch_random', False)
-    model_load = variant.get('model_load')
-    model_path = variant.get('model_path')
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
@@ -76,10 +74,9 @@ def experiment(
 
     # load dataset
     if env_name == 'ego-planner':
-        obstacle_dim = (1, 84, 84)
-        odom_dim = 9
-        act_dim = 9
-        for i in range(1, 75):
+        state_dim = (1, 84, 84)
+        act_dim = 15
+        for i in range(1, 55):
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego-planner-data_{i + 10}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
@@ -87,12 +84,6 @@ def experiment(
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
-        for i in range(len(trajectories)):
-            for j in range(len(trajectories[i]['actions'])):
-                trajectories[i]['actions'][j] = trajectories[i]['actions'][j] / action_norm
-                coef = trajectories[i]['actions'][j]
-                if np.any(np.abs(coef) > 1):
-                    print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -101,6 +92,16 @@ def experiment(
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
             print(type(trajectories))
+
+    for i in range(len(trajectories)):
+        for j in range(len(trajectories[i]['actions'])):
+
+            coef = trajectories[i]['actions'][j][0:15]
+
+            if np.any(np.abs(coef) > action_norm):
+                print(f"x_coef in trajectory {i} has values exceeding |{action_norm}|: {coef[np.abs(coef) > action_norm]}")
+
+            trajectories[i]['actions'][j] = trajectories[i]['actions'][j] / action_norm
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
@@ -161,6 +162,7 @@ def experiment(
                 replace=True,
                 p=p_sample,  # reweights so we sample according to timesteps
             )
+        
 
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
         for i in range(batch_size):
@@ -170,20 +172,17 @@ def experiment(
             # get sequences from dataset
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
-                obstacle = current_s[:, :, :84*84].reshape(1, -1, *obstacle_dim) 
-                odom = current_s[:, :, 84*84:].reshape(1, -1, odom_dim)
+                print(current_s.shape)
+                obstacle = current_s[:, :, :84*84].reshape(1, -1, *state_dim)
+                odom = current_s[:, :, 84*84:].reshape(1, -1, 13)
                 s.append(obstacle)
                 p.append(odom)
             else:
                 s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
             a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             # for i in range(len(a[0])):
-            #     print(a[-1][i])
+            #     print(a[-1][i])si:si + max_len].reshape(1, -1))
             r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
-            if 'terminals' in traj:
-                d.append(traj['terminals'][si:si + max_len].reshape(1, -1))
-            else:
-                d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             timesteps.append(np.arange(si, si + s[-1].shape[1]).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
             rtg.append(discount_cumsum(traj['rewards'][si:], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
@@ -193,8 +192,8 @@ def experiment(
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
             if env_name == 'ego-planner':
-                s[-1] = np.concatenate([np.zeros((1, max_len - tlen, *obstacle_dim)), s[-1]], axis=1)
-                p[-1] = np.concatenate([np.zeros((1, max_len - tlen, odom_dim)), p[-1]], axis=1)
+                s[-1] = np.concatenate([np.zeros((1, max_len - tlen, *state_dim)), s[-1]], axis=1)
+                p[-1] = np.concatenate([np.zeros((1, max_len - tlen, 13)), p[-1]], axis=1)
             else:
                 s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
                 s[-1] = (s[-1] - state_mean) / state_std
@@ -262,40 +261,22 @@ def experiment(
         return fn
 
     if model_type == 'dt':
-        if env_name == 'ego-planner':
-            model = DecisionTransformer(
-                state_dim=obstacle_dim,
-                odom_dim=odom_dim,
-                act_dim=act_dim,
-                max_length=K,
-                max_ep_len=max_ep_len,
-                hidden_size=variant['embed_dim'],
-                n_layer=variant['n_layer'],
-                n_head=variant['n_head'],
-                n_inner=4*variant['embed_dim'],
-                activation_function=variant['activation_function'],
-                n_positions=1024,
-                resid_pdrop=variant['dropout'],
-                attn_pdrop=variant['dropout'],
-            )
-        else:
-            model = DecisionTransformer(
-                state_dim=state_dim,
-                act_dim=act_dim,
-                max_length=K,
-                max_ep_len=max_ep_len,
-                hidden_size=variant['embed_dim'],
-                n_layer=variant['n_layer'],
-                n_head=variant['n_head'],
-                n_inner=4*variant['embed_dim'],
-                activation_function=variant['activation_function'],
-                n_positions=1024,
-                resid_pdrop=variant['dropout'],
-                attn_pdrop=variant['dropout'],
-            )
-        if model_load:
-            model_dict = torch.load(model_path)
-            model.load_state_dict(model_dict, strict=True)
+        model = DecisionTransformer(
+            state_dim=state_dim,
+            act_dim=act_dim,
+            max_length=K,
+            max_ep_len=max_ep_len,
+            hidden_size=variant['embed_dim'],
+            n_layer=variant['n_layer'],
+            n_head=variant['n_head'],
+            n_inner=4*variant['embed_dim'],
+            activation_function=variant['activation_function'],
+            n_positions=1024,
+            resid_pdrop=variant['dropout'],
+            attn_pdrop=variant['dropout'],
+        )
+        model_dict = torch.load('/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
+        model.load_state_dict(model_dict, strict=True)
     elif model_type == 'bc':
         model = MLPBCModel(
             state_dim=state_dim,
@@ -380,12 +361,12 @@ def experiment(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default='hopper')
+    parser.add_argument('--env', type=str, default='ego-planner')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=512)
     parser.add_argument('--n_layer', type=int, default=3)
@@ -399,10 +380,8 @@ if __name__ == '__main__':
     parser.add_argument('--max_iters', type=int, default=10000)
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    parser.add_argument('--get_batch_random', type=bool, default=False)
-    parser.add_argument('--model_load', type=bool, default=False)
-    parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
+    parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
+    parser.add_argument('--get_batch_random', type=bool, default=True)
     
     args = parser.parse_args()
 
