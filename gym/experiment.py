@@ -79,6 +79,7 @@ def experiment(
         obstacle_dim = (1, 84, 84)
         odom_dim = 9
         act_dim = 9
+        del_list = []
         for i in range(1, 75):
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego-planner-data_{i + 10}.pkl'
             if i == 1:
@@ -93,6 +94,7 @@ def experiment(
                 coef = trajectories[i]['actions'][j]
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
+                    del_list.append(i)
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -101,6 +103,9 @@ def experiment(
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
             print(type(trajectories))
+
+    for i in range(len(del_list)):
+        del(trajectories[del_list[i]])
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
