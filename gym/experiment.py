@@ -35,6 +35,7 @@ def experiment(
     get_batch_random = variant.get('get_batch_random', False)
     model_load = variant.get('model_load')
     model_path = variant.get('model_path')
+    expended_cnn = variant.get('expended_cnn')
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
@@ -282,6 +283,7 @@ def experiment(
                 n_positions=1024,
                 resid_pdrop=variant['dropout'],
                 attn_pdrop=variant['dropout'],
+                extended_cnn=expended_cnn
             )
         else:
             model = DecisionTransformer(
@@ -408,6 +410,7 @@ if __name__ == '__main__':
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
+    parser.add_argument('--expended_cnn', type=bool, default=True)
     
     args = parser.parse_args()
 

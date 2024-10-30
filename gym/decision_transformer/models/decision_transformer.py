@@ -23,6 +23,7 @@ class DecisionTransformer(TrajectoryModel):
             max_ep_len=4096,
             action_tanh=True,
             odom_dim=None,
+            extended_cnn=False,
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -45,14 +46,34 @@ class DecisionTransformer(TrajectoryModel):
 
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
-            self.embed_state = nn.Sequential(
-                nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
-                nn.ReLU(),
-                nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
-                nn.ReLU(),
-                nn.Flatten(),
-                nn.Linear(in_features=64 * 9 * 9, out_features=self.before_concat_hidden_size)
-            )
+            if extended_cnn:
+                self.embed_state = nn.Sequential(
+                    nn.Conv2d(in_channels=1, out_channels=32, kernel_size=5, stride=2),
+                    nn.BatchNorm2d(32),
+                    nn.ReLU(),
+                    nn.MaxPool2d(kernel_size=2, stride=2),
+
+                    nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2),
+                    nn.BatchNorm2d(64),
+                    nn.ReLU(),
+                    nn.MaxPool2d(kernel_size=2, stride=2),
+
+                    nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1),
+                    nn.BatchNorm2d(128),
+                    nn.ReLU(),
+                    
+                    nn.Flatten(),
+                    nn.Linear(in_features=128 * 2 * 2, out_features=self.before_concat_hidden_size)
+                )
+            else:
+                self.embed_state = nn.Sequential(
+                    nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
+                    nn.ReLU(),
+                    nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
+                    nn.ReLU(),
+                    nn.Flatten(),
+                    nn.Linear(in_features=64 * 9 * 9, out_features=self.before_concat_hidden_size)
+                )
             self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
         else:
             self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
