@@ -63,6 +63,7 @@ class DecisionTransformer(TrajectoryModel):
                     nn.ReLU(),
                     
                     nn.Flatten(),
+                    nn.Dropout(p=0.5),
                     nn.Linear(in_features=128 * 2 * 2, out_features=self.before_concat_hidden_size)
                 )
             else:
