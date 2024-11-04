@@ -105,8 +105,8 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    for i in range(len(del_list)):
-        del(trajectories[del_list[i]])
+    for i in sorted(del_list, reverse=True):
+        del trajectories[i]
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
