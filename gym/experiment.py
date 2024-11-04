@@ -79,7 +79,7 @@ def experiment(
     if env_name == 'ego-planner':
         obstacle_dim = (1, 84, 84)
         odom_dim = 9
-        act_dim = 9
+        act_dim = 6
         del_list = []
         for i in range(1, 75):
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego-planner-data_{i + 10}.pkl'
@@ -182,7 +182,7 @@ def experiment(
                 p.append(odom)
             else:
                 s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
-            a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
+            a.append(traj['actions'][si:si + max_len][:, :6].reshape(1, -1, act_dim))
             # for i in range(len(a[0])):
             #     print(a[-1][i])
             r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
@@ -392,7 +392,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=20)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=256)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=512)
     parser.add_argument('--n_layer', type=int, default=3)
