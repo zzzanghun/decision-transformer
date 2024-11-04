@@ -41,7 +41,7 @@ class DecisionTransformer(TrajectoryModel):
         # is that the positional embeddings are removed (since we'll add those ourselves)
         self.transformer = GPT2Model(config)
 
-        self.embed_timestep = nn.Embedding(max_ep_len, hidden_size)
+        self.embed_timestep = nn.Embedding(max_length, hidden_size)
         self.embed_return = torch.nn.Linear(1, hidden_size)
 
         if isinstance(self.state_dim, tuple):
