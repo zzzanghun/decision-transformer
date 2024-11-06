@@ -59,10 +59,11 @@ class DecisionTransformer(TrajectoryModel):
                     nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2),
                     nn.BatchNorm2d(128),
                     nn.ReLU(),
+                    nn.MaxPool2d(kernel_size=2, stride=2),
                     
                     nn.Flatten(),
                     nn.Dropout(p=0.5),
-                    nn.Linear(in_features=128 * 2 * 2, out_features=self.before_concat_hidden_size)
+                    nn.Linear(in_features=128 * 4 * 4, out_features=self.before_concat_hidden_size)
                 )
             else:
                 self.embed_state = nn.Sequential(
