@@ -75,7 +75,13 @@ class DecisionTransformer(TrajectoryModel):
                     nn.Flatten(),
                     nn.Linear(in_features=64 * 9 * 9, out_features=self.before_concat_hidden_size)
                 )
-            self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
+            self.embed_odom = nn.Sequential(
+                    nn.Linear(odom_dim, 256),
+                    nn.ReLU(),
+                    nn.Dropout(p=0.5),
+                    nn.Linear(256, self.before_concat_hidden_size)
+            )
+
         else:
             self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
         self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)
