@@ -35,7 +35,7 @@ def experiment(
     get_batch_random = variant.get('get_batch_random', False)
     model_load = variant.get('model_load')
     model_path = variant.get('model_path')
-    expended_cnn = variant.get('expended_cnn')
+    extended_cnn = variant.get('extended_cnn')
 
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
@@ -78,7 +78,8 @@ def experiment(
     # load dataset
     if env_name == 'ego-planner':
         obstacle_dim = (1, 84, 84)
-        odom_dim = 9
+        before_odom_dim = 9
+        odom_dim = 6
         act_dim = 6
         del_list = []
         for i in range(1, 75):
@@ -169,6 +170,7 @@ def experiment(
             )
 
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
+        odom_indices = [i for i in range(9) if i not in [2, 5, 8]]
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, traj['rewards'].shape[0] - 1)
@@ -177,7 +179,8 @@ def experiment(
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
                 obstacle = current_s[:, :, :84*84].reshape(1, -1, *obstacle_dim) 
-                odom = current_s[:, :, 84*84:].reshape(1, -1, odom_dim)
+                odom = current_s[:, :, 84*84:].reshape(1, -1, before_odom_dim)
+                odom = odom[:, :, odom_indices]
                 s.append(obstacle)
                 p.append(odom)
             else:
@@ -283,7 +286,7 @@ def experiment(
                 n_positions=1024,
                 resid_pdrop=variant['dropout'],
                 attn_pdrop=variant['dropout'],
-                extended_cnn=expended_cnn
+                extended_cnn=extended_cnn
             )
         else:
             model = DecisionTransformer(
@@ -410,7 +413,7 @@ if __name__ == '__main__':
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
-    parser.add_argument('--expended_cnn', type=bool, default=True)
+    parser.add_argument('--extended_cnn', type=bool, default=True)
     
     args = parser.parse_args()
 
