@@ -384,6 +384,7 @@ def experiment(
             print(f"Model saved at iteration {iter+1}")
         if log_to_wandb:
             wandb.log(outputs)
+            wandb.log_artifact(model_dict, type='model')
 
 
 if __name__ == '__main__':
