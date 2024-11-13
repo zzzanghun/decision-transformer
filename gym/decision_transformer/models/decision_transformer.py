@@ -24,6 +24,8 @@ class DecisionTransformer(TrajectoryModel):
             action_tanh=True,
             odom_dim=None,
             extended_cnn=False,
+            time_embedding=True,
+            coef_time_embedding=1,
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -36,12 +38,14 @@ class DecisionTransformer(TrajectoryModel):
         )
 
         self.odom_dim = odom_dim
+        self.time_embedding = time_embedding
+        self.coef_time_embedding = coef_time_embedding
 
         # note: the only difference between this GPT2Model and the default Huggingface version
         # is that the positional embeddings are removed (since we'll add those ourselves)
         self.transformer = GPT2Model(config)
 
-        self.embed_timestep = nn.Embedding(max_length, hidden_size)
+        self.embed_timestep = nn.Embedding(20, hidden_size)
         self.embed_return = torch.nn.Linear(1, hidden_size)
 
         if isinstance(self.state_dim, tuple):
@@ -110,12 +114,14 @@ class DecisionTransformer(TrajectoryModel):
         
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
-        time_embeddings = self.embed_timestep(timesteps)
+        if self.time_embedding:
+            time_embeddings = self.embed_timestep(timesteps)
+            time_embeddings *= self.coef_time_embedding
 
-        # time embeddings are treated similar to positional embeddings
-        state_embeddings = state_embeddings + time_embeddings
-        action_embeddings = action_embeddings + time_embeddings
-        returns_embeddings = returns_embeddings + time_embeddings
+            # time embeddings are treated similar to positional embeddings
+            state_embeddings = state_embeddings + time_embeddings
+            action_embeddings = action_embeddings + time_embeddings
+            returns_embeddings = returns_embeddings + time_embeddings
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions

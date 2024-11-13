@@ -78,8 +78,7 @@ def experiment(
     # load dataset
     if env_name == 'ego-planner':
         obstacle_dim = (1, 84, 84)
-        before_odom_dim = 9
-        odom_dim = 6
+        odom_dim = 9
         act_dim = 6
         del_list = []
         for i in range(1, 75):
@@ -170,7 +169,6 @@ def experiment(
             )
 
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
-        odom_indices = [i for i in range(9) if i not in [2, 5, 8]]
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, traj['rewards'].shape[0] - 1)
@@ -179,8 +177,7 @@ def experiment(
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
                 obstacle = current_s[:, :, :84*84].reshape(1, -1, *obstacle_dim) 
-                odom = current_s[:, :, 84*84:].reshape(1, -1, before_odom_dim)
-                odom = odom[:, :, odom_indices]
+                odom = current_s[:, :, 84*84:].reshape(1, -1, odom_dim)
                 s.append(obstacle)
                 p.append(odom)
             else:
@@ -285,7 +282,9 @@ def experiment(
                 n_positions=1024,
                 resid_pdrop=variant['dropout'],
                 attn_pdrop=variant['dropout'],
-                extended_cnn=extended_cnn
+                extended_cnn=extended_cnn,
+                time_embedding=variant['time_embedding'],
+                coef_time_embedding=variant['coef_time_embedding']
             )
         else:
             model = DecisionTransformer(
@@ -413,6 +412,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
+    parser.add_argument('--time_embedding', type=bool, default=False)
+    parser.add_argument('--coef_time_embedding', type=float, default=1)
     
     args = parser.parse_args()
 
