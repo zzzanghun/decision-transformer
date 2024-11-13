@@ -372,7 +372,7 @@ def experiment(
 
     for iter in range(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
-        if (iter + 1) % 100 == 0 and min_action_error > outputs['training/train_loss_mean']:
+        if (iter + 1) % 1000 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
             folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/{current_date}/{iter + 1}_{min_action_error:e}"
@@ -382,9 +382,10 @@ def experiment(
             model_dict = model.state_dict()
             torch.save(model_dict, save_other_model_path)
             print(f"Model saved at iteration {iter+1}")
+            if log_to_wandb:
+                wandb.log_artifact(model_dict, type='model')
         if log_to_wandb:
             wandb.log(outputs)
-            wandb.log_artifact(model_dict, type='model')
 
 
 if __name__ == '__main__':
