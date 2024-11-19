@@ -17,6 +17,9 @@ from decision_transformer.models.mlp_bc import MLPBCModel
 from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
 
+np.set_printoptions(threshold=np.inf)
+np.set_printoptions(linewidth=np.inf)
+
 
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
@@ -80,9 +83,10 @@ def experiment(
         obstacle_dim = (1, 84, 84)
         odom_dim = 9
         act_dim = 6
+        reward_radius = 10
         del_list = []
-        for i in range(1, 75):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego-planner-data_{i + 10}.pkl'
+        for i in range(1, 52):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/grid/ego-planner-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
@@ -96,6 +100,11 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
+                obs_observation = trajectories[i]['observations'][j][:, :84*84].reshape(84, 84)
+                x, y = np.ogrid[:84, :84]
+                distance_squared = (x - 42)**2 + (y - 42)**2
+                mask = distance_squared <= reward_radius**2
+                trajectories[i]['rewards'][j] = np.sum(obs_observation[mask])
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -383,7 +392,7 @@ def experiment(
             torch.save(model_dict, save_other_model_path)
             print(f"Model saved at iteration {iter+1}")
             if log_to_wandb:
-                wandb.log_artifact(model_dict, type='model')
+                wandb.log_artifact(save_other_model_path, type='model')
         if log_to_wandb:
             wandb.log(outputs)
 
