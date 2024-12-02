@@ -70,7 +70,7 @@ def experiment(
         env = None
         max_ep_len = 300
         env_targets = [0, 0]
-        scale = 1.
+        scale = 100.
         action_norm = 5.0
     else:
         raise NotImplementedError
@@ -201,7 +201,7 @@ def experiment(
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             timesteps.append(np.arange(0, 0 + s[-1].shape[1]).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
-            rtg.append(discount_cumsum(traj['rewards'][si:], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
+            rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+8], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
             if rtg[-1].shape[1] <= s[-1].shape[1]:
                 rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
 
