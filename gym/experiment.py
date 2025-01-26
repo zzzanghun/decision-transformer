@@ -81,12 +81,12 @@ def experiment(
     # load dataset
     if env_name == 'ego-planner':
         obstacle_dim = (1, 84, 84)
-        odom_dim = 9
+        odom_dim = 12
         act_dim = 6
         reward_radius = 10
         del_list = []
-        for i in range(1, 52):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/grid/ego-planner-data_{i}.pkl'
+        for i in range(1, 10):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/vigo/odom_0/vigo-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
@@ -95,8 +95,11 @@ def experiment(
                     trajectories += pickle.load(f)
         for i in range(len(trajectories)):
             for j in range(len(trajectories[i]['actions'])):
-                trajectories[i]['actions'][j] = trajectories[i]['actions'][j] / action_norm
-                coef = trajectories[i]['actions'][j]
+                coef = trajectories[i]['actions'][j] / action_norm
+                # Discretize to 0.001 intervals
+                coef = np.round(coef / 0.001) * 0.001
+                # Assign back
+                trajectories[i]['actions'][j] = coef
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
@@ -201,7 +204,7 @@ def experiment(
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             timesteps.append(np.arange(0, 0 + s[-1].shape[1]).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
-            rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+8], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
+            rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+5], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
             if rtg[-1].shape[1] <= s[-1].shape[1]:
                 rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
 
@@ -423,7 +426,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
-    parser.add_argument('--time_embedding', type=bool, default=False)
+    parser.add_argument('--time_embedding', type=bool, default=True)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
     
     args = parser.parse_args()
