@@ -85,15 +85,17 @@ def experiment(
         act_dim = 6
         reward_radius = 10
         del_list = []
-        for i in range(1, 10):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/vigo/odom_0/vigo-data_{i}.pkl'
+        for i in range(1, 32):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
+        high_step_trajectories = []
         for i in range(len(trajectories)):
+            keep_trajectory = False
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -103,11 +105,15 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
+                if np.any(np.abs(coef) > 0.1):
+                    keep_trajectory = True
                 obs_observation = trajectories[i]['observations'][j][:, :84*84].reshape(84, 84)
                 x, y = np.ogrid[:84, :84]
                 distance_squared = (x - 42)**2 + (y - 42)**2
                 mask = distance_squared <= reward_radius**2
                 trajectories[i]['rewards'][j] = np.sum(obs_observation[mask])
+            if keep_trajectory:
+                high_step_trajectories.append(trajectories[i])
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -117,8 +123,11 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    for i in sorted(del_list, reverse=True):
-        del trajectories[i]
+    # for i in sorted(del_list, reverse=True):
+    #     del trajectories[i]
+    trajectories = high_step_trajectories
+
+    print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
