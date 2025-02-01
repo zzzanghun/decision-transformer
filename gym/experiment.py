@@ -83,7 +83,7 @@ def experiment(
         obstacle_dim = (1, 84, 84)
         odom_dim = 12
         act_dim = 6
-        reward_radius = 10
+        reward_radius = 20
         del_list = []
         for i in range(1, 32):
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
@@ -93,6 +93,18 @@ def experiment(
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
+        for i in range(1, 32):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
+        for i in range(1, 32):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_5/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
+        for i in range(1, 32):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_4/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
         high_step_trajectories = []
         for i in range(len(trajectories)):
             keep_trajectory = False
@@ -105,7 +117,7 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
-                if np.any(np.abs(coef) > 0.1):
+                if np.any(np.abs(coef) > 0.05):
                     keep_trajectory = True
                 obs_observation = trajectories[i]['observations'][j][:, :84*84].reshape(84, 84)
                 x, y = np.ogrid[:84, :84]
@@ -396,7 +408,7 @@ def experiment(
         if (iter + 1) % 1000 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
-            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/{current_date}/{iter + 1}_{min_action_error:e}"
+            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/descritize/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
             save_other_model_path = os.path.join(folder_name, 'total_model.pth')
@@ -416,7 +428,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=10)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=512)
     parser.add_argument('--n_layer', type=int, default=3)
@@ -425,13 +437,13 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
-    parser.add_argument('--warmup_steps', type=int, default=10000)
+    parser.add_argument('--warmup_steps', type=int, default=5000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
-    parser.add_argument('--max_iters', type=int, default=10000)
+    parser.add_argument('--max_iters', type=int, default=50000)
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--log_to_wandb', '-w', type=bool, default=False)
-    parser.add_argument('--get_batch_random', type=bool, default=False)
+    parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
+    parser.add_argument('--get_batch_random', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
