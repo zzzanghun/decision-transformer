@@ -123,7 +123,13 @@ def experiment(
                 x, y = np.ogrid[:84, :84]
                 distance_squared = (x - 42)**2 + (y - 42)**2
                 mask = distance_squared <= reward_radius**2
-                trajectories[i]['rewards'][j] = np.sum(obs_observation[mask])
+                reward = np.sum(obs_observation[mask])
+                if j > 0:
+                    trajectories[i]['rewards'][j-1] = reward
+            # Set the reward of the last step to 0
+            trajectories[i]['rewards'][-1] = 0
+            if keep_trajectory:
+                high_step_trajectories.append(trajectories[i])
             if keep_trajectory:
                 high_step_trajectories.append(trajectories[i])
     else:
