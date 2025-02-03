@@ -36,6 +36,7 @@ def experiment(
     device = variant.get('device', 'cuda')
     log_to_wandb = variant.get('log_to_wandb', False)
     get_batch_random = variant.get('get_batch_random', False)
+    get_batch_action_sum = variant.get('get_batch_action_sum', False)
     model_load = variant.get('model_load')
     model_path = variant.get('model_path')
     extended_cnn = variant.get('extended_cnn')
@@ -105,9 +106,7 @@ def experiment(
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_4/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
-        high_step_trajectories = []
         for i in range(len(trajectories)):
-            keep_trajectory = False
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -117,8 +116,6 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
-                if np.any(np.abs(coef) > 0.05):
-                    keep_trajectory = True
                 obs_observation = trajectories[i]['observations'][j][:, :84*84].reshape(84, 84)
                 x, y = np.ogrid[:84, :84]
                 distance_squared = (x - 42)**2 + (y - 42)**2
@@ -128,10 +125,6 @@ def experiment(
                     trajectories[i]['rewards'][j-1] = reward
             # Set the reward of the last step to 0
             trajectories[i]['rewards'][-1] = 0
-            if keep_trajectory:
-                high_step_trajectories.append(trajectories[i])
-            if keep_trajectory:
-                high_step_trajectories.append(trajectories[i])
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -143,7 +136,6 @@ def experiment(
 
     # for i in sorted(del_list, reverse=True):
     #     del trajectories[i]
-    trajectories = high_step_trajectories
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
@@ -192,6 +184,10 @@ def experiment(
     # used to reweight sampling so we sample according to timesteps instead of trajectories
     p_sample = traj_lens[sorted_inds] / sum(traj_lens[sorted_inds])
 
+    if get_batch_action_sum:
+        action_sums = np.array([np.sum(np.abs(trajectory['actions'])) for trajectory in trajectories])
+        p_action_sample = action_sums / np.sum(action_sums)
+
     def get_batch(batch_size=256, max_len=K):
         if get_batch_random:
             batch_inds = np.random.choice(
@@ -199,6 +195,14 @@ def experiment(
                 size=batch_size,
                 replace=True,
             )
+        elif get_batch_action_sum:
+            batch_inds = np.random.choice(
+                np.arange(num_trajectories),
+                size=batch_size,
+                replace=True,
+                p=p_action_sample,
+            )
+            # print("action sum sampling")
         else:
             batch_inds = np.random.choice(
                 np.arange(num_trajectories),
@@ -449,7 +453,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
-    parser.add_argument('--get_batch_random', type=bool, default=True)
+    parser.add_argument('--get_batch_random', type=bool, default=False)
+    parser.add_argument('--get_batch_action_sum', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
