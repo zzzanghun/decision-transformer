@@ -72,7 +72,7 @@ def experiment(
         max_ep_len = 300
         env_targets = [0, 0]
         scale = 100.
-        action_norm = 5.0
+        action_norm = 15.0
     else:
         raise NotImplementedError
 
@@ -81,32 +81,30 @@ def experiment(
 
     # load dataset
     if env_name == 'ego-planner':
-        obstacle_dim = (1, 84, 84)
-        odom_dim = 12
+        obstacle_dim = (1, 100, 100)
+        odom_dim = 8
         act_dim = 6
         reward_radius = 20
         del_list = []
         for i in range(1, 32):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/grid_4/vigo-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
-        for i in range(1, 32):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
-        for i in range(1, 32):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_5/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
-        for i in range(1, 32):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_4/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
+        # Define the indices of the actions to be used
+
+        action_indices = [0, 1, 2, 6, 7, 8]
+        obs_indices = [0, 1, 3, 4, 6, 7, 9, 10]
+        
         for i in range(len(trajectories)):
+            trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
+            obs_first_part = trajectories[i]['observations'][:, :, :100*100]
+            obs_second_part = trajectories[i]['observations'][:, :, 100*100:]
+            obs_second_part = obs_second_part[:, :, obs_indices]
+            trajectories[i]['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -116,9 +114,9 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
-                obs_observation = trajectories[i]['observations'][j][:, :84*84].reshape(84, 84)
-                x, y = np.ogrid[:84, :84]
-                distance_squared = (x - 42)**2 + (y - 42)**2
+                obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
+                x, y = np.ogrid[:100, :100]
+                distance_squared = (x - 50)**2 + (y - 50)**2
                 mask = distance_squared <= reward_radius**2
                 reward = np.sum(obs_observation[mask])
                 if j > 0:
@@ -134,8 +132,8 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    # for i in sorted(del_list, reverse=True):
-    #     del trajectories[i]
+    for i in sorted(del_list, reverse=True):
+        del trajectories[i]
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
@@ -219,8 +217,8 @@ def experiment(
             # get sequences from dataset
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
-                obstacle = current_s[:, :, :84*84].reshape(1, -1, *obstacle_dim) 
-                odom = current_s[:, :, 84*84:].reshape(1, -1, odom_dim)
+                obstacle = current_s[:, :, :100*100].reshape(1, -1, *obstacle_dim) 
+                odom = current_s[:, :, 100*100:].reshape(1, -1, odom_dim)
                 s.append(obstacle)
                 p.append(odom)
             else:
@@ -436,7 +434,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', type=str, default='ego-planner')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
-    parser.add_argument('--K', type=int, default=10)
+    parser.add_argument('--K', type=int, default=5)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
@@ -454,7 +452,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
     parser.add_argument('--get_batch_random', type=bool, default=False)
-    parser.add_argument('--get_batch_action_sum', type=bool, default=True)
+    parser.add_argument('--get_batch_action_sum', type=bool, default=False)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
