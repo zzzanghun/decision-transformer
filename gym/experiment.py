@@ -114,6 +114,11 @@ def experiment(
                 if np.any(np.abs(coef) > 1):
                     print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     del_list.append(i)
+                direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
+                norm = np.linalg.norm(direction_vector)
+                if norm != 0:
+                    direction_vector = direction_vector / norm
+                trajectories[i]['observations'][j][:, 100*100:100*100 + 2] = direction_vector
                 obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
                 x, y = np.ogrid[:100, :100]
                 distance_squared = (x - 50)**2 + (y - 50)**2
