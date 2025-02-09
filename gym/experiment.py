@@ -71,8 +71,8 @@ def experiment(
         env = None
         max_ep_len = 300
         env_targets = [0, 0]
-        scale = 100.
-        action_norm = 15.0
+        scale = 15.
+        action_norm = 5.0
     else:
         raise NotImplementedError
 
@@ -86,8 +86,8 @@ def experiment(
         act_dim = 6
         reward_radius = 20
         del_list = []
-        for i in range(1, 32):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/grid_4/vigo-data_{i}.pkl'
+        for i in range(1, 55):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/vigo/grid_4/vigo-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
@@ -105,6 +105,7 @@ def experiment(
             obs_second_part = trajectories[i]['observations'][:, :, 100*100:]
             obs_second_part = obs_second_part[:, :, obs_indices]
             trajectories[i]['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
+            trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -123,11 +124,15 @@ def experiment(
                 x, y = np.ogrid[:100, :100]
                 distance_squared = (x - 50)**2 + (y - 50)**2
                 mask = distance_squared <= reward_radius**2
-                reward = np.sum(obs_observation[mask])
+                reward = np.sum(obs_observation[mask]) / 1000
                 if j > 0:
                     trajectories[i]['rewards'][j-1] = reward
+                    # print(reward, trajectories[i]['rewards'][j-1])
             # Set the reward of the last step to 0
-            trajectories[i]['rewards'][-1] = 0
+            # Calculate the mean of all rewards in the trajectories
+        all_rewards = [reward for trajectory in trajectories for reward in trajectory['rewards']]
+        mean_reward = np.mean(all_rewards)
+        print(f"Mean reward: {mean_reward}")
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -251,9 +256,9 @@ def experiment(
                 s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
                 s[-1] = (s[-1] - state_mean) / state_std
             a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * -10., a[-1]], axis=1)
-            r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1) / scale
+            r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / scale
+            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / tlen
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
         s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
