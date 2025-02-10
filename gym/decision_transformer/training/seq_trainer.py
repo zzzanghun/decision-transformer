@@ -37,13 +37,13 @@ class SequenceTrainer(Trainer):
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), .025)
         self.optimizer.step()
 
         with torch.no_grad():
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
-            action_preds[:, :] = action_preds[:, :] * 5.0
-            action_target[:, :] = action_target[:, :] * 5.0
+            action_preds[:, :] = action_preds[:, :]
+            action_target[:, :] = action_target[:, :]
             self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
         return loss.detach().cpu().item()

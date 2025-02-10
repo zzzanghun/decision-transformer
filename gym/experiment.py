@@ -72,7 +72,7 @@ def experiment(
         max_ep_len = 300
         env_targets = [0, 0]
         scale = 15.
-        action_norm = 5.0
+        action_norm = 1.0
     else:
         raise NotImplementedError
 
@@ -86,18 +86,27 @@ def experiment(
         act_dim = 6
         reward_radius = 20
         del_list = []
-        for i in range(1, 55):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/vigo/grid_4/vigo-data_{i}.pkl'
+        for i in range(1, 102):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_4/ego-planner-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
+        for i in range(1, 102):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_5/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
+        for i in range(1, 102):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
         # Define the indices of the actions to be used
 
         action_indices = [0, 1, 2, 6, 7, 8]
         obs_indices = [0, 1, 3, 4, 6, 7, 9, 10]
+        sampled_traj = []
         
         for i in range(len(trajectories)):
             trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
@@ -106,15 +115,23 @@ def experiment(
             obs_second_part = obs_second_part[:, :, obs_indices]
             trajectories[i]['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
             trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
+            save_traj = False
+            del_traj = False
             for j in range(len(trajectories[i]['actions'])):
+                if j > 0:
+                    trajectories[i]['observations'][j] = trajectories[i]['observations'][j-1]
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
                 coef = np.round(coef / 0.001) * 0.001
                 # Assign back
                 trajectories[i]['actions'][j] = coef
-                if np.any(np.abs(coef) > 1):
-                    print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
-                    del_list.append(i)
+                if np.any(np.abs(coef) > 0.1):
+                    # print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
+                    # del_list.append(i)
+                    save_traj = True
+                if np.any(np.abs(coef) > 6.0):
+                    # print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 6]}")
+                    del_traj = True
                 direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
                 norm = np.linalg.norm(direction_vector)
                 if norm != 0:
@@ -130,6 +147,8 @@ def experiment(
                     # print(reward, trajectories[i]['rewards'][j-1])
             # Set the reward of the last step to 0
             # Calculate the mean of all rewards in the trajectories
+            if save_traj and not del_traj:
+                sampled_traj.append(trajectories[i])
         all_rewards = [reward for trajectory in trajectories for reward in trajectory['rewards']]
         mean_reward = np.mean(all_rewards)
         print(f"Mean reward: {mean_reward}")
@@ -142,8 +161,10 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    for i in sorted(del_list, reverse=True):
-        del trajectories[i]
+    # for i in sorted(del_list, reverse=True):
+    #     del trajectories[i]
+
+    # trajectories = sampled_traj
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
@@ -423,7 +444,7 @@ def experiment(
 
     for iter in range(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
-        if (iter + 1) % 1000 == 0:
+        if (iter + 1) % 500 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
             folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/descritize/{iter + 1}_{min_action_error:e}"
@@ -444,7 +465,7 @@ if __name__ == '__main__':
     parser.add_argument('--env', type=str, default='ego-planner')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
-    parser.add_argument('--K', type=int, default=5)
+    parser.add_argument('--K', type=int, default=10)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
@@ -453,8 +474,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_head', type=int, default=1)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-6)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-6)
     parser.add_argument('--warmup_steps', type=int, default=5000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=50000)
@@ -462,7 +483,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
     parser.add_argument('--get_batch_random', type=bool, default=False)
-    parser.add_argument('--get_batch_action_sum', type=bool, default=False)
+    parser.add_argument('--get_batch_action_sum', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
