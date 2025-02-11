@@ -102,8 +102,12 @@ def experiment(
             dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
-        # Define the indices of the actions to be used
+        for i in range(1, 102):
+            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
+            with open(dataset_path, 'rb') as f:
+                trajectories += pickle.load(f)
 
+        # Define the indices of the actions to be used
         action_indices = [0, 1, 2, 6, 7, 8]
         obs_indices = [0, 1, 3, 4, 6, 7, 9, 10]
         sampled_traj = []
@@ -118,19 +122,17 @@ def experiment(
             save_traj = False
             del_traj = False
             for j in range(len(trajectories[i]['actions'])):
-                if j > 0:
-                    trajectories[i]['observations'][j] = trajectories[i]['observations'][j-1]
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
                 coef = np.round(coef / 0.001) * 0.001
                 # Assign back
                 trajectories[i]['actions'][j] = coef
-                if np.any(np.abs(coef) > 0.1):
+                if np.any(np.abs(coef) > 0.5):
                     # print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     # del_list.append(i)
                     save_traj = True
                 if np.any(np.abs(coef) > 6.0):
-                    # print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 6]}")
+                    print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 6]}")
                     del_traj = True
                 direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
                 norm = np.linalg.norm(direction_vector)
@@ -149,7 +151,7 @@ def experiment(
             # Calculate the mean of all rewards in the trajectories
             if save_traj and not del_traj:
                 sampled_traj.append(trajectories[i])
-        all_rewards = [reward for trajectory in trajectories for reward in trajectory['rewards']]
+        all_rewards = [reward for trajectory in sampled_traj for reward in trajectory['rewards']]
         mean_reward = np.mean(all_rewards)
         print(f"Mean reward: {mean_reward}")
     else:
@@ -164,7 +166,7 @@ def experiment(
     # for i in sorted(del_list, reverse=True):
     #     del trajectories[i]
 
-    # trajectories = sampled_traj
+    trajectories = sampled_traj
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
@@ -447,7 +449,7 @@ def experiment(
         if (iter + 1) % 500 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
-            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/descritize/{iter + 1}_{min_action_error:e}"
+            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/embed_256/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
             save_other_model_path = os.path.join(folder_name, 'total_model.pth')
@@ -469,14 +471,14 @@ if __name__ == '__main__':
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
-    parser.add_argument('--embed_dim', type=int, default=512)
+    parser.add_argument('--embed_dim', type=int, default=256)
     parser.add_argument('--n_layer', type=int, default=3)
     parser.add_argument('--n_head', type=int, default=1)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-6)
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-6)
-    parser.add_argument('--warmup_steps', type=int, default=5000)
+    parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=50000)
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
