@@ -177,14 +177,14 @@ def experiment(
         if mode == 'delayed':  # delayed: all rewards moved to end of trajectory
             path['rewards'][-1] = path['rewards'].sum()
             path['rewards'][:-1] = 0.
-        states.append(path['observations'])
+        # states.append(path['observations'])
         traj_lens.append(len(path['observations']))
         returns.append(path['rewards'].sum())
     traj_lens, returns = np.array(traj_lens), np.array(returns)
 
     # used for input normalization
-    states = np.concatenate(states, axis=0)
-    state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
+    # states = np.concatenate(states, axis=0)
+    # state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
 
     num_timesteps = sum(traj_lens)
 
@@ -218,6 +218,7 @@ def experiment(
     if get_batch_action_sum:
         action_sums = np.array([np.sum(np.abs(trajectory['actions'])) for trajectory in trajectories])
         p_action_sample = action_sums / np.sum(action_sums)
+
 
     def get_batch(batch_size=256, max_len=K):
         if get_batch_random:
@@ -281,7 +282,7 @@ def experiment(
             a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * -10., a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / tlen
+            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / max_len
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
         s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
@@ -476,8 +477,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_head', type=int, default=1)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-6)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-6)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=50000)

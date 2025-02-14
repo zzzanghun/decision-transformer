@@ -37,7 +37,7 @@ class SequenceTrainer(Trainer):
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), .025)
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), .25)
         self.optimizer.step()
 
         with torch.no_grad():
