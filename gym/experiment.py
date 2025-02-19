@@ -16,6 +16,7 @@ from decision_transformer.models.decision_transformer import DecisionTransformer
 from decision_transformer.models.mlp_bc import MLPBCModel
 from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
+from auto_encoder.model import CostmapConvAutoencoder   
 
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
@@ -343,12 +344,15 @@ def experiment(
 
     if model_type == 'dt':
         if env_name == 'ego-planner':
+            auto_encoder = CostmapConvAutoencoder(latent_dim=128)
+            auto_encoder.load_state_dict(torch.load(f"/home/zzzanghun/git/decision-transformer/gym/model/auto_encoder/model_900.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
                 act_dim=act_dim,
                 max_length=K,
                 max_ep_len=max_ep_len,
+                auto_encoder=auto_encoder,
                 hidden_size=variant['embed_dim'],
                 n_layer=variant['n_layer'],
                 n_head=variant['n_head'],
@@ -394,7 +398,7 @@ def experiment(
 
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
-        model.parameters(),
+        [p for n, p in model.named_parameters() if not n.startswith('embed_state.')],
         lr=variant['learning_rate'],
         weight_decay=variant['weight_decay'],
     )
@@ -474,7 +478,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=256)
     parser.add_argument('--n_layer', type=int, default=3)
-    parser.add_argument('--n_head', type=int, default=1)
+    parser.add_argument('--n_head', type=int, default=4)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)

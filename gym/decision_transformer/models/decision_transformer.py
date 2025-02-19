@@ -26,6 +26,7 @@ class DecisionTransformer(TrajectoryModel):
             extended_cnn=False,
             time_embedding=True,
             coef_time_embedding=1,
+            auto_encoder=None,
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -51,28 +52,36 @@ class DecisionTransformer(TrajectoryModel):
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
             if extended_cnn:
+                # self.embed_state = nn.Sequential(
+                #     # First convolution: smaller stride to retain details
+                #     nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1, bias=True),
+                #     nn.ReLU(),
+
+                #     # Second convolution
+                #     nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1, groups=16, bias=True),
+                #     nn.ReLU(),
+                #     nn.Conv2d(16, 32, kernel_size=1, stride=1, padding=0, bias=True),
+                #     nn.ReLU(),
+
+                #     # Extra convolution for more capacity
+                #     nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, groups=32, bias=True),
+                #     nn.ReLU(),
+                #     nn.Conv2d(32, 128, kernel_size=1, stride=1, padding=0, bias=True),
+                #     nn.ReLU(),
+
+                #     nn.AdaptiveAvgPool2d(output_size=(1, 1)),
+                #     nn.Flatten(),
+
+                #     nn.Linear(in_features=128, out_features=self.before_concat_hidden_size)
+                # )
                 self.embed_state = nn.Sequential(
-                    # First convolution: smaller stride to retain details
-                    nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1, bias=True),
-                    nn.ReLU(),
-
-                    # Second convolution
-                    nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1, groups=16, bias=True),
-                    nn.ReLU(),
-                    nn.Conv2d(16, 32, kernel_size=1, stride=1, padding=0, bias=True),
-                    nn.ReLU(),
-
-                    # Extra convolution for more capacity
-                    nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, groups=32, bias=True),
-                    nn.ReLU(),
-                    nn.Conv2d(32, 128, kernel_size=1, stride=1, padding=0, bias=True),
-                    nn.ReLU(),
-
-                    nn.AdaptiveAvgPool2d(output_size=(1, 1)),
-                    nn.Flatten(),
-
-                    nn.Linear(in_features=128, out_features=self.before_concat_hidden_size)
+                    auto_encoder.encoder,
+                    nn.Flatten(start_dim=1),
+                    auto_encoder.fc_enc
                 )
+                # auto encoder를 freeze
+                for param in self.embed_state.parameters():
+                    param.requires_grad = False
             else:
                 self.embed_state = nn.Sequential(
                     nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
