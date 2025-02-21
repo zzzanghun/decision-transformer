@@ -128,12 +128,12 @@ def experiment(
                 coef = np.round(coef / 0.001) * 0.001
                 # Assign back
                 trajectories[i]['actions'][j] = coef
-                if np.any(np.abs(coef) > 0.5):
+                if np.any(np.abs(coef) > 0.1):
                     # print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
                     # del_list.append(i)
                     save_traj = True
-                if np.any(np.abs(coef) > 6.0):
-                    print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 6]}")
+                if np.any(np.abs(coef) > 2.0):
+                    print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 2]}")
                     del_traj = True
                 direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
                 norm = np.linalg.norm(direction_vector)
@@ -485,7 +485,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
     parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
-    parser.add_argument('--max_iters', type=int, default=50000)
+    parser.add_argument('--max_iters', type=int, default=500000)
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
