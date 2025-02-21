@@ -21,6 +21,10 @@ from auto_encoder.model import CostmapConvAutoencoder
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
 
+PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+print(PROJECT_PATH)
+
 
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
@@ -88,7 +92,7 @@ def experiment(
         reward_radius = 20
         del_list = []
         for i in range(1, 102):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_4/ego-planner-data_{i}.pkl'
+            dataset_path = f'{PROJECT_PATH}/data/ego/grid_4/ego-planner-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
@@ -96,15 +100,15 @@ def experiment(
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
         for i in range(1, 102):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/grid_5/ego-planner-data_{i}.pkl'
+            dataset_path = f'{PROJECT_PATH}/data/ego/grid_5/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
         for i in range(1, 102):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
+            dataset_path = f'{PROJECT_PATH}/data/ego/odom_300/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
         for i in range(1, 102):
-            dataset_path = f'/home/zzzanghun/git/decision-transformer/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
+            dataset_path = f'{PROJECT_PATH}/data/ego/odom_400/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
 
@@ -345,7 +349,7 @@ def experiment(
     if model_type == 'dt':
         if env_name == 'ego-planner':
             auto_encoder = CostmapConvAutoencoder(latent_dim=128)
-            auto_encoder.load_state_dict(torch.load(f"/home/zzzanghun/git/decision-transformer/gym/model/auto_encoder/model_900.pth"))
+            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/auto_encoder/model_900.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
@@ -454,7 +458,7 @@ def experiment(
         if (iter + 1) % 500 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
-            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/embed_256/{iter + 1}_{min_action_error:e}"
+            folder_name = f"{PROJECT_PATH}/model/embed_256/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
             save_other_model_path = os.path.join(folder_name, 'total_model.pth')
@@ -492,7 +496,7 @@ if __name__ == '__main__':
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--get_batch_action_sum', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
-    parser.add_argument('--model_path', type=str, default='/home/zzzanghun/git/decision-transformer/gym/model/2024-10-19/6050_1.828267e-05/total_model.pth')
+    parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
     parser.add_argument('--time_embedding', type=bool, default=True)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
