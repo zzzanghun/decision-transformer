@@ -91,24 +91,30 @@ def experiment(
         act_dim = 6
         reward_radius = 20
         del_list = []
-        for i in range(1, 102):
-            dataset_path = f'{PROJECT_PATH}/data/ego/grid_4/ego-planner-data_{i}.pkl'
+        # for i in range(1, 102):
+        #     dataset_path = f'{PROJECT_PATH}/data/ego/grid_4/ego-planner-data_{i}.pkl'
+        #     if i == 1:
+        #         with open(dataset_path, 'rb') as f:
+        #             trajectories = pickle.load(f)
+        #     else:
+        #         with open(dataset_path, 'rb') as f:
+        #             trajectories += pickle.load(f)
+        # for i in range(1, 102):
+        #     dataset_path = f'{PROJECT_PATH}/data/ego/grid_5/ego-planner-data_{i}.pkl'
+        #     with open(dataset_path, 'rb') as f:
+        #         trajectories += pickle.load(f)
+        for i in range(1, 30):
+            dataset_path = f'{PROJECT_PATH}/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
             else:
                 with open(dataset_path, 'rb') as f:
                     trajectories += pickle.load(f)
-        for i in range(1, 102):
-            dataset_path = f'{PROJECT_PATH}/data/ego/grid_5/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
-        for i in range(1, 102):
-            dataset_path = f'{PROJECT_PATH}/data/ego/odom_300/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
-        for i in range(1, 102):
-            dataset_path = f'{PROJECT_PATH}/data/ego/odom_400/ego-planner-data_{i}.pkl'
+            # with open(dataset_path, 'rb') as f:
+            #     trajectories += pickle.load(f)
+        for i in range(1, 30):
+            dataset_path = f'{PROJECT_PATH}/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
             with open(dataset_path, 'rb') as f:
                 trajectories += pickle.load(f)
 
@@ -148,7 +154,17 @@ def experiment(
                 x, y = np.ogrid[:100, :100]
                 distance_squared = (x - 50)**2 + (y - 50)**2
                 mask = distance_squared <= reward_radius**2
-                reward = np.sum(obs_observation[mask]) / 1000
+                # reward = np.sum(obs_observation[mask]) / 1000
+                masked_indices = np.argwhere((obs_observation == 1) & (mask))
+                if masked_indices.size > 0:
+                    distances_to_center = np.sqrt((masked_indices[:, 0] - 50)**2 + (masked_indices[:, 1] - 50)**2)
+                    min_distance = np.min(distances_to_center)
+                else:
+                    min_distance = reward_radius
+                reward = min_distance / reward_radius
+                # obs_observation[50,50] = 999
+                # print(obs_observation)
+                # print(f"Minimum distance to (50, 50): {min_distance}")
                 if j > 0:
                     trajectories[i]['rewards'][j-1] = reward
                     # print(reward, trajectories[i]['rewards'][j-1])
@@ -349,7 +365,7 @@ def experiment(
     if model_type == 'dt':
         if env_name == 'ego-planner':
             auto_encoder = CostmapConvAutoencoder(latent_dim=128)
-            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/auto_encoder/model_900.pth"))
+            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/auto_encoder/model_900.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
