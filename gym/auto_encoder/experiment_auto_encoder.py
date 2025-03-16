@@ -6,6 +6,9 @@ from model import CostmapConvAutoencoder
 from torch.utils.data import DataLoader
 import wandb
 import os
+
+PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+print(PROJECT_PATH)
 def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
     """
     오토인코더 학습 루틴 예시.
@@ -50,10 +53,10 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
         })
 
         if epoch % 100 == 0:
-            folder_name = f"/home/zzzanghun/git/decision-transformer/gym/model/auto_encoder"
+            folder_name = f"{PROJECT_PATH}/model/auto_encoder"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            torch.save(model.state_dict(), f"/home/zzzanghun/git/decision-transformer/gym/model/auto_encoder/model_{epoch}.pth")
+            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/model_{epoch}.pth")
 
 
 if __name__ == "__main__":
