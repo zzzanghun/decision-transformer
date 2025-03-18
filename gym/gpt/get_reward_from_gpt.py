@@ -393,7 +393,7 @@ def get_traj():
         episode_buffer.append(trajectories[i])
 
         # 50개 에피소드마다 저장
-        if len(episode_buffer) == 1:
+        if len(episode_buffer) == 50:
             save_count += 1
             save_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_{save_count}.pkl"
             with open(save_path, 'wb') as f:
