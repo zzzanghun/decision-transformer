@@ -1,0 +1,178 @@
+{
+    "role": "You are the judge evaluating the drone's polynomial trajectory. Based on the step-by-step evaluation criteria below, produce a final score in the range of 0 to 1.",
+    "instructions": [
+        "1. The given data (grid map, the direction vector from the drone's current position to the target, the drone's current state, and the drone's predicted velocity up to 1.5 seconds) comes from the expert polynomial trajectory. Analyze this information comprehensively, but remember that the purpose is not to evaluate the trajectory's overall performance, but only to determine whether it is safe or efficient.",
+
+        "2. Safety and efficiency are primarily determined from the obstacles and the provided predicted trajectory. The further the obstacles are from the provided predicted trajectory, the safer but less efficient the trajectory is, and the closer the obstacles are to the provided predicted trajectory, the more efficient but less safe the trajectory is.",
+
+        "3. Safety and efficiency are also determined by the cosine similarity between the target direction vector, current velocity, and predicted velocity. The higher the cosine similarity, the more efficient the path is, and the lower the cosine similarity, the safer the path is.",
+
+        "4. The trajectory is provided to the drone continuously, and the trajectory information provided to you now is just one of them. Therefore, remember that the current trajectory provided is not the final one, and the flight will continue beyond the currently provided trajectory.",
+
+        "5. The score does not measure the trajectory's absolute quality but only its trade-off between safety and efficiency.",
+
+        "6. For reference, a very safe trajectory example scoring 0.1 and a very efficient trajectory example scoring 0.9 are provided. Keep in mind that if a trajectory has higher alignment with the target direction and predicted velocity but passes closer to obstacles, it can be considered a very efficient but less safe trajectory. Conversely, if it has lower alignment but maintains a greater distance from obstacles than a very efficient trajectory, it can be considered safer but less efficient. This distinction does not evaluate the trajectory's absolute performance but only its safety and efficiency characteristics."
+    ],
+    "scoring": {
+      "0": "A very safe but inefficient trajectory",
+      "1": "A very efficient but less safe trajectory"
+    },
+    "input_data": {
+      "grid_map": {
+        "description": "100 × 100 grid map (10cm per cell). Rows represent the x-axis, columns represent the y-axis. As coordinates increase, the index decreases. For example, if the drone's position is (50, 50) and it moves +1m in both the x and y directions, it becomes (40, 40).",
+        "size": "100x100",
+        "resolution": "10cm per cell",
+        "drone_position": [50, 50],
+        "legend": {
+          "0": "No obstacle",
+          "1": "Obstacle",
+          "2": "Predicted drone trajectory for 1.5 seconds"
+        },
+        "run_length_data_explanation": "Fill the indicated rows and cols range with the specified value. All unmentioned cells are 0.",
+        "run_length_data": [
+          { "rows": "20-36", "cols": "36-50", "value": "1" },
+          { "rows": "20-36", "cols": "77-90", "value": "1" },
+          { "rows": "23-36", "cols": "0-13", "value": "1" },
+          { "rows": "59-76", "cols": "0-10", "value": "1" },
+          { "rows": "59-74", "cols": "36-50", "value": "1" },
+          { "rows": "59-75", "cols": "76-89", "value": "1" },
+          { "rows": "98-98", "cols": "0-8", "value": "1" },
+          { "rows": "50-50", "cols": "50-50", "value": "2" },
+          { "rows": "50-50", "cols": "51-51", "value": "2" },
+          { "rows": "50-50", "cols": "52-52", "value": "2" },
+          { "rows": "50-50", "cols": "53-53", "value": "2" },
+          { "rows": "50-50", "cols": "54-54", "value": "2" },
+          { "rows": "50-50", "cols": "55-55", "value": "2" },
+          { "rows": "50-50", "cols": "56-56", "value": "2" },
+          { "rows": "50-50", "cols": "57-57", "value": "2" },
+          { "rows": "50-50", "cols": "58-58", "value": "2" }
+        ]
+      },
+      "drone_current_position_target_direction_and_state": {
+        "description": "drone_current_position_target_direction_and_state",
+        "data": {
+          "the target direction vector": "0.198,-0.98",
+          "current_velocity": "0.346,-0.463",
+          "current_acceleration": "0.027,0.014"
+        }
+      },
+      "drone_predicted_velocity": {
+        "description": "Drone's predicted velocity",
+        "predicted velocity": {
+          "description": "Predicted velocities from 0 to 2.0 seconds in 0.1-second intervals, (x_velocity, y_velocity)",
+          "data": {
+            "x_velocity": "[0.346,0.351,0.361,0.371,0.379,0.382,0.38,0.372,0.357,0.336,0.309,0.279,0.246,0.215,0.187,0.168]",
+            "y_velocity": "[-0.463,-0.463,-0.467,-0.475,-0.488,-0.504,-0.522,-0.541,-0.56,-0.575,-0.585,-0.585,-0.574,-0.546,-0.496,-0.421]"
+          }
+        }
+      }
+    },
+    "evaluation_criteria": {
+      "safety": {
+        "description": "Evaluate whether the drone's trajectory minimizes the risk of collision with obstacles. Assign a score stepwise based on the following conditions.",
+        "criteria": [
+          "1. The larger the average and minimum distances between the trajectory (In the grid map, marked as 2) and the obstacles (In the grid map, marked as 1), the higher the safety is considered. Specifically, if there is an obstacle on the target direction vector, and the minimum distance between the trajectory and the obstacles is over 50cm (5 grid cells in the grid map), the safety is considered a safe trajectory but less efficient.",
+          "2. The lower the cosine similarity between the target direction vector, current velocity, and predicted velocity, the safer the trajectory is considered but less efficient.",
+          "3. In particular, if the cosine similarity between the target direction vector, current velocity, and predicted velocity is below 0.9, and the minimum distances between the trajectory (In the grid map, marked as 2) and the obstacles (In the grid map, marked as 1) is at least 40cm (4 grid cells in the grid map), it is considered a score of 0.0.",
+          "4. If criteria 3 is not satisfied, the higher the cosine similarity between the target direction vector, current velocity, and predicted velocity, and the smaller the minimum distance between the trajectory and the obstacles, the less safe but more efficient the trajectory becomes.",
+          "5. If there are no obstacles around the drone, a speed of 0.6 m/s or lower is considered a safe trajectory, while anything higher is progressively less safe but more efficient.",
+          "6. Using the given data, especially the predicted velocities and grid_map information, infer the trajectory after 1.5 seconds. Then, determine how close the inferred trajectory is to obstacles and how high the cosine similarity is.If the inferred trajectory is too close to obstacles, it is considered a less safe and more efficient trajectory. Even if there are no obstacles (marked as 1 in the grid map) around the trajectory (marked as 2 in the grid map), if, based on the predicted velocities and trajectory after 1.5 seconds, it seems like the drone will either collide with or barely pass by obstacles, the trajectory is considered efficient but not safe.",
+          "7. Do not simply compare the minimum distances between the trajectory (marked as 2 in the grid map) and the obstacles (marked as 1 in the grid map), or the cosine similarity between the target direction vector, current velocity, and predicted velocity. Instead, assess both factors comprehensively."
+        ]
+      },
+      "efficiency": {
+        "description": "Evaluate how quickly and directly the drone moves toward the target.",
+        "criteria": [
+          "1. If obstacles are avoided minimally, efficiency is higher. Specifically, if the average and minimum distances between the trajectory (In the grid map, marked as 2) and the obstacles (In the grid map, marked as 1) are 10cm (1 grid cell in the grid map) or less, it is considered a most efficient trajectory.",
+          "2. The higher the cosine similarity between the target direction vector, current velocity, and predicted velocity, the higher the efficiency but less safety.",
+          "3. Even if the cosine similarity is low, if the distance between the predicted trajectory and an obstacle is 20 cm or less, it is considered an efficient avoidance but less safe. As this distance increases, it is regarded as less efficient but safer.",
+          "4. Consider the predicted trajectory (marked as 2 on the grid map) to be more efficient the closer it is to an obstacle (marked as 1 on the grid map). Specifically, the higher the cosine similarity between the target direction vector, current velocity, and predicted velocity (above 0.9), and the closer the predicted trajectory (marked as 2) is to an obstacle (marked as 1) within 10 cm (1 grid cells in the grid map), the more efficient the trajectory is considered. In particular, if the distance between the obstacle and the trajectory is 10 cm (1 grid cell) or less, the score is considered to be 1.0.",
+          "5. If criteria 4 is not satisfied, the lower the cosine similarity between the target direction vector, current velocity, and predicted velocity, and the bigger the minimum distance between the trajectory and the obstacles, the safer but less efficient the trajectory becomes.",
+          "6. If the drone's velocity is 0.7 m/s or higher, consider it efficient. If the velocity is below 0.7 m/s, it is not efficient but considered a safe trajectory. This judgment applies not only to the current velocity but also to the predicted velocity. Evaluate efficiency stepwise based on the drone's velocity.",
+          "7. If there are no obstacles around, the higher the drone's velocity or predicted velocity is above 0.7 m/s, the more efficient the trajectory becomes.",
+          "6. Using the given data, especially the predicted velocities and grid_map information, infer the trajectory after 1.5 seconds. Then, determine how close the inferred trajectory is to obstacles and how high the cosine similarity is.If the inferred trajectory is too close to obstacles, it is considered a less safe and more efficient trajectory.",
+          "7. Do not simply compare the minimum distances between the trajectory (marked as 2 in the grid map) and the obstacles (marked as 1 in the grid map), or the cosine similarity between the target direction vector, current velocity, and predicted velocity. Instead, assess both factors comprehensively."
+        ],
+        "examples of efficient trajectory": [
+            "1. The drone's velocity, predicted velocity, and alignment with the direction vector to the target are below 0.9, but the predicted trajectory is less than 10cm from obstacles.",
+            "2. When avoiding obstacles, the drone's velocity, predicted velocity, and alignment with the direction vector to the target are above 0.95."
+        ]
+      }
+    },
+    "example_scenarios": {
+      "very_safe_trajectory": {
+        "description": "This path detours around obstacles greatly, making collision risk almost zero, but resulting in a lower alignment with the target direction and lower efficiency.",
+        "grid_map": {
+          "description": "100 × 100 grid map (10cm per cell). Rows represent the x-axis, columns represent the y-axis. As coordinates increase, the index decreases. For example, if the drone's position is (50, 50) and it moves +1m in both the x and y directions, it becomes (40, 40).",
+          "size": "100x100",
+          "resolution": "10cm per cell",
+          "drone_position": [50, 50],
+          "legend": {
+            "0": "No obstacle",
+            "1": "Obstacle",
+            "2": "Drone's expected trajectory"
+          },
+          "run_length_data_explanation": "Fill the indicated rows and cols range with the specified value. All unmentioned cells are 0.",
+          "run_length_data": "[{rows:15-29,cols:53-69,value:1},{rows:16-31,cols:91-98,value:1},{rows:18-32,cols:17-30,value:1},{rows:55-72,cols:16-30,value:1},{rows:56-69,cols:52-69,value:1},{rows:56-69,cols:91-98,value:1},{rows:95-98,cols:13-28,value:1},{rows:50-50,cols:50-50,value:2},{rows:51-51,cols:49-49,value:2},{rows:51-51,cols:50-50,value:2},{rows:52-52,cols:48-48,value:2},{rows:52-52,cols:49-49,value:2},{rows:53-53,cols:46-46,value:2},{rows:53-53,cols:47-47,value:2},{rows:53-53,cols:48-48,value:2},{rows:54-54,cols:44-44,value:2},{rows:54-54,cols:45-45,value:2},{rows:54-54,cols:46-46,value:2}]"
+        },
+        "drone_current_position_target_direction_and_state": {
+          "description": "drone_current_position_target_direction_and_state",
+          "data": {
+            "the target direction vector": "-0.999,0.033",
+            "current_velocity": "-0.538,0.241",
+            "current_acceleration": "-0.039,-0.074"
+          }
+        },
+        "drone_predicted_velocity": {
+          "description": "Drone's predicted velocity",
+          "predicted velocity": {
+            "description": "Predicted velocities from 0 to 1.5 seconds in 0.1-second intervals, (x_velocity, y_velocity)",
+            "data": {
+              "x_velocity": "[-0.538,-0.529,-0.501,-0.459,-0.409,-0.358,-0.308,-0.263,-0.225,-0.195,-0.173,-0.158,-0.149,-0.143,-0.136,-0.124]",
+              "y_velocity": "[0.241,0.249,0.279,0.323,0.372,0.419,0.46,0.491,0.511,0.518,0.515,0.504,0.49,0.478,0.477,0.496]"
+            }
+          }
+        },
+        "evaluation": "This trajectory avoids obstacles by a large margin, resulting in almost no collision risk. However, it is less efficient due to a longer distance to the target.",
+        "expected_score": 0.1
+      },
+      "very_efficient_trajectory": {
+        "description": "This path avoids obstacles while maintaining a high alignment with the target direction. Current speed is somewhat low, but it increases over time, suggesting a quick arrival at the target. However, it passes relatively close to obstacles.",
+        "grid_map": {
+          "description": "100 × 100 grid map (10cm per cell). Rows represent the x-axis, columns represent the y-axis. As coordinates increase, the index decreases. For example, if the drone's position is (50, 50) and it moves +1m in both the x and y directions, it becomes (40, 40).",
+          "size": "100x100",
+          "resolution": "10cm per cell",
+          "drone_position": [50, 50],
+          "legend": {
+            "0": "No obstacle",
+            "1": "Obstacle",
+            "2": "Drone's expected trajectory"
+          },
+          "run_length_data_explanation": "Fill the indicated rows and cols range with the specified value. All unmentioned cells are 0.",
+          "run_length_data": "[{rows:13-35,cols:54-72,value:1},{rows:13-26,cols:90-98,value:1},{rows:21-34,cols:16-29,value:1},{rows:53-69,cols:49-70,value:1},{rows:54-74,cols:15-31,value:1},{rows:55-69,cols:88-98,value:1},{rows:95-98,cols:12-27,value:1},{rows:96-98,cols:52-64,value:1},{rows:50-50,cols:50-50,value:2},{rows:51-51,cols:49-49,value:2},{rows:51-51,cols:50-50,value:2},{rows:52-52,cols:49-49,value:2},{rows:53-53,cols:49-49,value:2},{rows:54-54,cols:49-49,value:2},{rows:55-55,cols:48-48,value:2},{rows:55-55,cols:49-49,value:2},{rows:56-56,cols:48-48,value:2},{rows:57-57,cols:48-48,value:2},{rows:58-58,cols:48-48,value:2}]"
+        },
+        "drone_current_position_target_direction_and_state": {
+          "description": "Drone's current position and target direction vector, along with its state",
+          "data": {
+            "the target direction vector": "-0.544,0.839",
+            "current_velocity": "-0.475,0.194",
+            "current_acceleration": "0.007,0.011"
+          }
+        },
+        "drone_predicted_velocity": {
+          "description": "Drone's predicted velocity",
+          "predicted velocity": {
+            "description": "Predicted velocities from 0 to 1.5 seconds in 0.1-second intervals, (x_velocity, y_velocity)",
+            "data": {
+              "x_velocity": "[-0.475,-0.476,-0.479,-0.484,-0.49,-0.499,-0.508,-0.518,-0.529,-0.54,-0.552,-0.563,-0.574,-0.585,-0.595,-0.604]",
+              "y_velocity": "[0.194,0.193,0.189,0.181,0.171,0.158,0.145,0.13,0.114,0.098,0.082,0.067,0.052,0.038,0.025,0.014]"
+            }
+          }
+        },
+        "evaluation": "This path avoids obstacles while aligning closely with the target direction. The current speed is low but increases over time, suggesting efficient travel to the target. However, it comes relatively close to obstacles, increasing collision risk.",
+        "expected_score": 0.9
+      }
+    },
+    "output_format": "Output only a float value between 0 and 1. Think of 10 candidate values in advance and provide their average as the final reward. Do not give all 10 candidate values, just provide the average. Absolutely no other text, words, or messages—only the numeric value."
+  }
+  
