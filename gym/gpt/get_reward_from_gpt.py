@@ -298,39 +298,40 @@ def get_traj():
     random.shuffle(episode_indices)  # 인덱스 랜덤하게 섞기
 
     for i in episode_indices:
-        trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
+        episode = copy.deepcopy(trajectories[i])
+        episode['actions'] = episode['actions'][:, action_indices]
 
-        obs_first_part = trajectories[i]['observations'][:, :, :100*100]
-        obs_second_part = trajectories[i]['observations'][:, :, 100*100:]
+        obs_first_part = episode['observations'][:, :, :100*100]
+        obs_second_part = episode['observations'][:, :, 100*100:]
         obs_second_part = obs_second_part[:, :, obs_indices]
-        trajectories[i]['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
+        episode['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
 
         # reward 초기화 (모두 0)
-        trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
+        trajectories[i]['rewards'] = np.zeros(len(episode['actions']), dtype=float)
 
         # 각 step에 대해 ChatGPT 호출
-        for j in range(len(trajectories[i]['actions'])):
-            coef = trajectories[i]['actions'][j]
+        for j in range(len(episode['actions'])):
+            coef = episode['actions'][j]
             coef = np.round(coef / 0.001) * 0.001
-            trajectories[i]['actions'][j] = coef
+            episode['actions'][j] = coef
 
             a5, a4, a3, b5, b4, b3 = coef
 
-            drone_info = trajectories[i]['observations'][j][:, 100*100:]
+            drone_info = episode['observations'][j][:, 100*100:]
             v_x = drone_info[0][2]         # 현재 x축 속도
             v_y = drone_info[0][3]         # 현재 y축 속도
             a_x = drone_info[0][6]         # 현재 x축 가속도
             a_y = drone_info[0][7]         # 현재 y축 가속도
 
             # 목표방향 정규화
-            direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
+            direction_vector = episode['observations'][j][:, 100*100:100*100 + 2]
             norm = np.linalg.norm(direction_vector)
             if norm != 0:
                 direction_vector = direction_vector / norm
-            trajectories[i]['observations'][j][:, 100*100:100*100 + 2] = direction_vector
+            episode['observations'][j][:, 100*100:100*100 + 2] = direction_vector
 
             # 소수점 3째자리에서 반올림한 값 문자열로
-            rounded_values = np.round(trajectories[i]['observations'][j][:, 100*100:], 3)
+            rounded_values = np.round(episode['observations'][j][:, 100*100:], 3)
             drone_info_str = str(rounded_values[0]).replace('\n', '').replace('  ', ' ')
 
             direction_to_target_str = ','.join([str(val) for val in rounded_values[0][:2]])
@@ -338,7 +339,7 @@ def get_traj():
             cur_acc_str = ','.join([str(val) for val in rounded_values[0][6:]])
 
             # Run-length 인코딩 위한 grid map
-            obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
+            obs_observation = episode['observations'][j][:, :100*100].reshape(100, 100)
             x0, y0 = 5, 5
             vx = []
             vy = []
