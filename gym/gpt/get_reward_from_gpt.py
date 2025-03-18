@@ -124,7 +124,7 @@ def get_reward_from_chat_gpt(prompt_data, episode_buffer):
     except Exception as e:
         print(f"[ERROR] ChatGPT API call failed: {str(e)}")
         if len(episode_buffer) > 0:
-            save_path = f"/home/zzzanghun/git/decision-transformer/gym/data/GPT_reward/gtp_reward_data_ValueError.pkl"
+            save_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_ValueError.pkl"
             with open(save_path, 'wb') as f:
                 pickle.dump(episode_buffer, f)
             print("saved episoed lenght: ", len(episode_buffer))
@@ -141,7 +141,7 @@ def extract_float_from_string(text: str, episode_buffer) -> float:
         print(f"[ERROR] 실수 변환 실패: '{text}'")
         print("프로세스를 종료합니다.")
         if len(episode_buffer) > 0:
-            save_path = f"/home/zzzanghun/git/decision-transformer/gym/data/GPT_reward/gtp_reward_data_ValueError.pkl"
+            save_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_ValueError.pkl"
             with open(save_path, 'wb') as f:
                 pickle.dump(episode_buffer, f)
             print("saved episoed lenght: ", len(episode_buffer))
@@ -392,9 +392,9 @@ def get_traj():
         episode_buffer.append(trajectories[i])
 
         # 50개 에피소드마다 저장
-        if len(episode_buffer) == 50:
+        if len(episode_buffer) == 1:
             save_count += 1
-            save_path = f"/home/zzzanghun/git/decision-transformer/gym/data/GPT_reward/gtp_reward_data_{save_count}.pkl"
+            save_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_{save_count}.pkl"
             with open(save_path, 'wb') as f:
                 pickle.dump(episode_buffer, f)
             print(f"에피소드 50개 저장 완료 -> {save_path}")
@@ -408,7 +408,7 @@ def get_traj():
             # 남은 buffer 저장
             if len(episode_buffer) > 0:
                 save_count += 1
-                save_path = f"/home/zzzanghun/git/decision-transformer/gym/data/GPT_reward/gtp_reward_data_{save_count}.pkl"
+                save_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_{save_count}.pkl"
                 with open(save_path, 'wb') as f:
                     pickle.dump(episode_buffer, f)
                 print(f"잔여 {len(episode_buffer)}개 에피소드 저장 완료 -> {save_path}")
