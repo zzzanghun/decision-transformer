@@ -3,12 +3,62 @@ import torch.nn as nn
 import torch.optim as optim
 from data import CostmapDataset
 from model import CostmapConvAutoencoder
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 import wandb
 import os
+import numpy as np
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 print(PROJECT_PATH)
+
+class RandomCostmapDataset(Dataset):
+    """
+    0, 0.5, 1 값을 무작위로 배치한 코스트맵 데이터셋
+    """
+    def __init__(self, size=100, num_samples=50000):
+        """
+        size: 코스트맵의 크기 (size x size)
+        num_samples: 데이터셋의 샘플 수
+        """
+        self.size = size
+        self.num_samples = num_samples
+        self.data = self._generate_random_data()
+        
+    def _generate_random_data(self):
+        # 0, 0.5, 1 값을 가진 랜덤 데이터 생성
+        data = []
+        for _ in range(self.num_samples):
+            # 먼저 모든 값을 0으로 초기화
+            costmap = np.zeros((1, self.size, self.size), dtype=np.float32)
+            
+            # 0.5 값을 가질 픽셀 수 (전체 픽셀의 10%)
+            num_half_pixels = int(0.1 * self.size * self.size)
+            # 1 값을 가질 픽셀 수 (전체 픽셀의 5%)
+            num_one_pixels = int(0.2 * self.size * self.size)
+            
+            # 0.5 값 랜덤 배치
+            half_indices = np.random.choice(self.size * self.size, num_half_pixels, replace=False)
+            for idx in half_indices:
+                row, col = idx // self.size, idx % self.size
+                costmap[0, row, col] = 0.5
+            
+            # 1 값 랜덤 배치
+            one_indices = np.random.choice(self.size * self.size, num_one_pixels, replace=False)
+            for idx in one_indices:
+                row, col = idx // self.size, idx % self.size
+                costmap[0, row, col] = 1.0
+                
+            data.append(torch.tensor(costmap, dtype=torch.float32))
+            
+        return data
+    
+    def __len__(self):
+        return self.num_samples
+    
+    def __getitem__(self, idx):
+        return self.data[idx]
+    
+
 def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
     """
     오토인코더 학습 루틴 예시.
@@ -56,12 +106,12 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
             folder_name = f"{PROJECT_PATH}/model/auto_encoder"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/model_{epoch}.pth")
+            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/autoencoder_with_traj_{epoch}.pth")
 
 
 if __name__ == "__main__":
     # 1) 데이터셋 및 데이터로더 준비
-    dataset = CostmapDataset()  # 임의 생성 예시
+    dataset = RandomCostmapDataset()  # 임의 생성 예시
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     # 2) 모델 생성
