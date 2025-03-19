@@ -111,7 +111,7 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
 
 if __name__ == "__main__":
     # 1) 데이터셋 및 데이터로더 준비
-    dataset = RandomCostmapDataset()  # 임의 생성 예시
+    dataset = CostmapDataset()  # 임의 생성 예시
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     # 2) 모델 생성

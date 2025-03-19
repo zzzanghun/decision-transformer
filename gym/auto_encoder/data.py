@@ -15,17 +15,20 @@ class CostmapDataset(Dataset):
     sampled_traj 내의 각 trajectory['observations'][..] 에서 
     100x100 costmap을 추출하여 Dataset으로 구성합니다.
     """
-    def __init__(self):
+    def __init__(self, add_random_lines=True):
         """
         Parameters:
         -----------
         sampled_traj : list
             'observations' 필드에 (배치, ..., 100*100 + 기타 정보)가 들어있는
             여러 trajectory 딕셔너리들의 리스트.
+        add_random_lines : bool
+            0.5 값을 가진 랜덤 선분을 추가할지 여부
         """
         self.data = []
         
         dataset_path = f'{PROJECT_PATH}/data/combined_data.pkl'
+        # dataset_path = f'{PROJECT_PATH}/data/ego/ego-planner-data_17.pkl'
         print(PROJECT_PATH)
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
@@ -74,7 +77,57 @@ class CostmapDataset(Dataset):
                     if 0 <= ix < 100 and 0 <= iy < 100:
                         obs_observation[ix, iy] = 0.5  # 일반적으로 행이 y축, 열이 x축을 나타냄
 
+                # 랜덤 선분 추가 (데이터 증강)
+                if add_random_lines:
+                    obs_observation = self._add_random_lines(obs_observation)
+                # print(obs_observation, "@#@@@@@@")
+
                 self.data.append(obs_observation.copy())
+
+    def _add_random_lines(self, costmap, num_lines=15, line_length=10):
+        """
+        코스트맵에 0.5 값을 가진 랜덤 선분을 추가합니다.
+        
+        Parameters:
+        -----------
+        costmap : numpy.ndarray
+            원본 코스트맵 (100x100)
+        num_lines : int
+            추가할 선분의 개수
+        line_length : int
+            각 선분의 길이
+            
+        Returns:
+        --------
+        numpy.ndarray
+            선분이 추가된 코스트맵
+        """
+        for _ in range(num_lines):
+            # 선분의 시작점 랜덤 선택
+            start_row = np.random.randint(0, 100 - line_length)
+            start_col = np.random.randint(0, 100 - line_length)
+            
+            # 선분의 방향 랜덤 선택 (0: 수평, 1: 수직, 2: 대각선 ↘, 3: 대각선 ↗)
+            direction = np.random.randint(0, 4)
+            
+            # 선분 그리기
+            for i in range(line_length):
+                if direction == 0:  # 수평
+                    row, col = start_row, start_col + i
+                elif direction == 1:  # 수직
+                    row, col = start_row + i, start_col
+                elif direction == 2:  # 대각선 ↘
+                    row, col = start_row + i, start_col + i
+                else:  # 대각선 ↗
+                    row, col = start_row + i, start_col + (line_length - 1 - i)
+                
+                # 경계 체크
+                if 0 <= row < 100 and 0 <= col < 100:
+                    # 기존 값이 1이 아닌 경우에만 0.5로 설정 (장애물은 유지)
+                    if costmap[row, col] != 1.0:
+                        costmap[row, col] = 0.5
+        
+        return costmap
 
     def __len__(self):
         return len(self.data)
