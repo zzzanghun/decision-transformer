@@ -117,18 +117,19 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
 
 if __name__ == "__main__":
     # 1) 데이터셋 및 데이터로더 준비
-    dataset = CostmapDataset()  # 임의 생성 예시
+    dataset = CostmapDataset(add_random_lines=False)  # 임의 생성 예시
     dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
 
     # 2) 모델 생성
     model = CostmapConvAutoencoder(latent_dim=128)
+    model.load_state_dict(torch.load(f"{PROJECT_PATH}/model/auto_encoder/model_900.pth"))
     
     wandb.init(
             project='auto-encoder'
         )
 
     # 3) 학습
-    train_autoencoder(model, dataloader, epochs=1000000, lr=1e-3)
+    train_autoencoder(model, dataloader, epochs=1000000, lr=1e-4)
     
     # 4) 추론(테스트) 예시
     # 실제 테스트 시에는 별도의 검증 세트를 사용해야 함

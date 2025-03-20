@@ -27,8 +27,8 @@ class CostmapDataset(Dataset):
         """
         self.data = []
         
-        dataset_path = f'{PROJECT_PATH}/data/combined_data.pkl'
-        # dataset_path = f'{PROJECT_PATH}/data/ego/ego-planner-data_17.pkl'
+        # dataset_path = f'{PROJECT_PATH}/data/combined_data.pkl'
+        dataset_path = f'{PROJECT_PATH}/data/ego/ego-planner-data_17.pkl'
         print(PROJECT_PATH)
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
@@ -63,6 +63,7 @@ class CostmapDataset(Dataset):
                     direction_vector = direction_vector / norm
                 trajectories[i]['observations'][j][:, 100*100:100*100 + 2] = direction_vector
                 obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
+                obs_observation = np.zeros_like(obs_observation)
                 x0, y0 = 5, 5
                 t_values = np.arange(0, 1.5 + 0.01, 0.01)
                 for t in t_values:
@@ -75,7 +76,7 @@ class CostmapDataset(Dataset):
                     
                     # grid map의 범위 내에 있는 경우에만 값을 2로 지정
                     if 0 <= ix < 100 and 0 <= iy < 100:
-                        obs_observation[ix, iy] = 0.5  # 일반적으로 행이 y축, 열이 x축을 나타냄
+                        obs_observation[ix, iy] = 1.0  # 일반적으로 행이 y축, 열이 x축을 나타냄
 
                 # 랜덤 선분 추가 (데이터 증강)
                 if add_random_lines:
