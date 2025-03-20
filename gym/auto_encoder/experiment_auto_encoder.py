@@ -57,8 +57,13 @@ class RandomCostmapDataset(Dataset):
     
     def __getitem__(self, idx):
         return self.data[idx]
-    
 
+def weighted_mse_loss(output, target):
+    # output, target shape = (batch, 1, H, W)
+    weight = torch.ones_like(target)
+    weight[target == 0.5] = 10.0  # 0.5인 지점의 손실 가중치 크게
+    return (weight * (output - target)**2).mean()
+    
 def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
     """
     오토인코더 학습 루틴 예시.
@@ -87,8 +92,9 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
             outputs = model(data)
             
             # Loss 계산
-            loss = criterion(outputs, data)
-            
+            # loss = criterion(outputs, data)
+            loss = weighted_mse_loss(outputs, data)
+
             # Backprop
             loss.backward()
             optimizer.step()
