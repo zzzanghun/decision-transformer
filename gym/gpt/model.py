@@ -27,9 +27,13 @@ class RewardModel(nn.Module):
 
         # 결합 및 보상 예측 레이어 (더 작은 모델로 변경)
         self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128 + 64, 128),
+            nn.Linear(128 + 128 + 64, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 128),
+            nn.ReLU(inplace=True),
             nn.Linear(128, 64),
             nn.ReLU(inplace=True),
             nn.Linear(64, 1),
