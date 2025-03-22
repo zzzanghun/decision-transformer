@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 class RewardModel(nn.Module):
-    def __init__(self, obstacle_encoder, path_encoder, drone_info_dim=46, latent_dim=128, dropout_rate=0.3):
+    def __init__(self, obstacle_encoder, path_encoder, drone_info_dim=46, latent_dim=128, dropout_rate=0.2):
         super(RewardModel, self).__init__()
 
         # 오토인코더에서 인코더 부분만 사용
@@ -19,27 +19,20 @@ class RewardModel(nn.Module):
         # 드론 정보 인코더 (더 작은 모델로 변경)
         self.drone_info_encoder = nn.Sequential(
             nn.Linear(drone_info_dim, 128),
-            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
             nn.ReLU(inplace=True)
         )
 
         # 결합 및 보상 예측 레이어 (더 작은 모델로 변경)
         self.reward_predictor = nn.Sequential(
             nn.Linear(128 + 128 + 64, 128),
-            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
-            nn.Dropout(dropout_rate),
-            nn.Linear(64, 32),
-            nn.ReLU(inplace=True),
-            nn.Linear(32, 1),
+            nn.Linear(64, 1),
             nn.Sigmoid()
         )
 
