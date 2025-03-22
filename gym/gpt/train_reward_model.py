@@ -11,7 +11,7 @@ import copy
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
-
+import math
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_PATH)
 print(f"프로젝트 경로: {PROJECT_PATH}")
@@ -304,20 +304,20 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
             # 학습률 스케줄러 업데이트
             scheduler.step(val_loss)
 
-            print(f"Epoch {epoch+1}/{epochs}, Val Loss: {val_loss:.6f}")
+            print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}")
 
             wandb.log({
-                "val_loss": val_loss,
+                "val_loss": math.sqrt(val_loss),
                 "learning_rate": optimizer.param_groups[0]['lr']
             })
         
         # 로그 출력
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}")
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {math.sqrt(train_loss):.6f}")
         
         # wandb 로깅
         wandb.log({
             "epoch": epoch + 1,
-            "train_loss": train_loss,
+            "train_loss": math.sqrt(train_loss),
         })
         
         # 최고 성능 모델 저장

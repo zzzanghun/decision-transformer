@@ -16,6 +16,10 @@ class RewardModel(nn.Module):
         for param in self.path_encoder.parameters():
             param.requires_grad = False  # 사전 학습된 가중치 고정
 
+        # BatchNorm 레이어를 모델 초기화 시 생성
+        self.obs_batch_norm = nn.BatchNorm1d(128 * 13 * 13)
+        self.path_batch_norm = nn.BatchNorm1d(128 * 13 * 13)
+
         # 드론 정보 인코더 (더 작은 모델로 변경)
         self.drone_info_encoder = nn.Sequential(
             nn.Linear(drone_info_dim, 128),
@@ -44,13 +48,13 @@ class RewardModel(nn.Module):
         obs_features = self.obstacle_encoder.encoder(obs)
         obs_features = torch.flatten(obs_features, start_dim=1)
         obs_features = self.dropout(obs_features)
-        obs_features = nn.BatchNorm1d(128 * 13 * 13)(obs_features)
+        obs_features = self.obs_batch_norm(obs_features)  # 미리 생성된 BatchNorm 사용
         obs_features = self.obstacle_encoder.fc_enc(obs_features)
         
         path_features = self.path_encoder.encoder(path)
         path_features = torch.flatten(path_features, start_dim=1)
         path_features = self.dropout(path_features)
-        path_features = nn.BatchNorm1d(128 * 13 * 13)(path_features)
+        path_features = self.path_batch_norm(path_features)  # 미리 생성된 BatchNorm 사용
         path_features = self.path_encoder.fc_enc(path_features)
         
         drone_features = self.drone_info_encoder(drone_info)
