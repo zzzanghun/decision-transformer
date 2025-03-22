@@ -278,7 +278,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         
         # 검증 모드
 
-        if epoch % 100 == 0:
+        if epoch % 10 == 0:
             model.eval()
             val_loss = 0.0
         
@@ -330,7 +330,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
             torch.save(model.state_dict(), model_save_path)
         
         # 주기적으로 모델 저장
-        if (epoch + 1) % 1000 == 0:
+        if (epoch + 1) % 100 == 0:
             folder_name = f"{PROJECT_PATH}/model/reward_model"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
