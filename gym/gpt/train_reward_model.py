@@ -191,9 +191,9 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
     val_size = len(dataset) - train_size
-    
+    generator = torch.Generator().manual_seed(50)
     train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size]
+        dataset, [train_size, val_size], generator=generator
     )
     
     train_dataloader = DataLoader(
