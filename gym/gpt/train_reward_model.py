@@ -435,7 +435,7 @@ if __name__ == '__main__':
         train_dataloader, 
         val_dataloader, 
         epochs=1000000, 
-        lr=1e-5
+        lr=1e-4
     )
     
     # 학습된 모델 로드 (최고 성능 모델)
