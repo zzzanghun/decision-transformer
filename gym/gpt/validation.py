@@ -233,13 +233,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
     
-    # wandb 초기화
-    wandb.init(project="reward-model-training", config={
-        "epochs": epochs,
-        "batch_size": train_loader.batch_size,
-        "learning_rate": lr,
-    })
-    
     # 학습 기록
     train_losses = []
     val_losses = []
@@ -247,7 +240,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
     
     for epoch in range(epochs):
         # 학습 모드
-        model.train()
+        model.eval()
         train_loss = 0.0
         
         # 학습 루프
@@ -262,72 +255,19 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
             
             # 순전파
             predicted_reward = model(drone_info, obs, path)
+
+            print(f"target_reward: {target_reward}, predicted_reward: {predicted_reward}, target_reward - predicted_reward: {target_reward - predicted_reward}")
             
             # 손실 계산
             loss = criterion(predicted_reward, target_reward)
-            
-            # 역전파 및 최적화
-            loss.backward()
-            optimizer.step()
             
             train_loss += loss.item() * drone_info.size(0)
         
         # 에폭 평균 손실
         train_loss /= len(train_loader.dataset)
-        train_losses.append(train_loss)
-        
-        # 검증 모드
-
-        if epoch % 100 == 0:
-            model.eval()
-            val_loss = 0.0
-        
-            with torch.no_grad():
-                for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
-                    drone_info = batch['drone_info'].to(device)
-                    obs = batch['obs'].to(device)
-                    path = batch['path'].to(device)
-                    target_reward = batch['reward'].to(device).unsqueeze(1)  # (B, 1)
-                    
-                    # 순전파
-                    predicted_reward = model(drone_info, obs, path)
-                    
-                    # 손실 계산
-                    loss = criterion(predicted_reward, target_reward)
-                    
-                    val_loss += loss.item() * drone_info.size(0)
-            
-            # 에폭 평균 검증 손실
-            val_loss /= len(val_loader.dataset)
-            val_losses.append(val_loss)
-            
-            # 학습률 스케줄러 업데이트
-            scheduler.step(val_loss)
-
-            print(f"Epoch {epoch+1}/{epochs}, Val Loss: {val_loss:.6f}")
-
-            wandb.log({
-                "val_loss": val_loss,
-                "learning_rate": optimizer.param_groups[0]['lr']
-            })
         
         # 로그 출력
         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}")
-        
-        # wandb 로깅
-        wandb.log({
-            "epoch": epoch + 1,
-            "train_loss": train_loss,
-        })
-        
-        # 최고 성능 모델 저장
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            folder_name = f"{PROJECT_PATH}/model/reward_model"
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_best.pth"
-            torch.save(model.state_dict(), model_save_path)
         
         # 주기적으로 모델 저장
         if (epoch + 1) % 1000 == 0:
@@ -336,14 +276,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
                 os.makedirs(folder_name)
             model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_epoch_{epoch+1}.pth"
             torch.save(model.state_dict(), model_save_path)
-    
-    # 학습 완료 후 최종 모델 저장
-    model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_final.pth"
-    torch.save(model.state_dict(), model_save_path)
-    print(f"최종 모델 저장됨: {model_save_path}")
-    
-    # wandb 종료
-    wandb.finish()
     
     return train_losses, val_losses
 
@@ -412,7 +344,7 @@ def visualize_predictions(model, dataloader, num_samples=5):
 
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=128)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=1)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
@@ -428,6 +360,8 @@ if __name__ == '__main__':
     print(f"드론 정보 차원: {drone_info_dim}")
     
     reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim)
+
+    reward_model.load_state_dict(torch.load(f"{PROJECT_PATH}/model/reward_model_epoch_100.pth"))
     
     # 모델 학습
     train_losses, val_losses = train_reward_model(

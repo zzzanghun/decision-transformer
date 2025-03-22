@@ -64,12 +64,12 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
 
 if __name__ == "__main__":
     # 1) 데이터셋 및 데이터로더 준비
-    dataset = CostmapDataset()
+    dataset = CostmapDataset(False)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
 
     # 2) 모델 생성
     model = CostmapConvAutoencoder(latent_dim=128)
-    model.load_state_dict(torch.load(f"/home/zzzanghun/git/decision-transformer/gym/model/auto_encoder/model_900.pth"))
+    model.load_state_dict(torch.load(f"/home/zzzanghun/git/decision-transformer/gym/model/autoencoder_with_traj_400.pth"))
     model.eval()    
 
     sample_data = next(iter(dataloader))
