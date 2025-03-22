@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-class RewardModel(nn.Module):
+class RewardModelOverfitting(nn.Module):
     def __init__(self, obstacle_encoder, path_encoder, drone_info_dim=46, latent_dim=128):
-        super(RewardModel, self).__init__()
+        super(RewardModelOverfitting, self).__init__()
 
         # 오토인코더에서 인코더 부분만 사용
         self.obstacle_encoder = obstacle_encoder

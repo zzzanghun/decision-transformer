@@ -18,6 +18,7 @@ print(f"프로젝트 경로: {PROJECT_PATH}")
 
 from auto_encoder.model import CostmapConvAutoencoder
 from gpt.model import RewardModel
+from gpt.model_overfitting import RewardModelOverfitting
 
 # 시드 설정
 SEED = 42
