@@ -228,7 +228,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
     
     # 손실 함수 및 옵티마이저 설정
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )

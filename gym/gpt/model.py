@@ -21,17 +21,17 @@ class RewardModel(nn.Module):
             nn.Linear(drone_info_dim, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
+            nn.BatchNorm1d(128),
             nn.Linear(128, 64),
             nn.ReLU(inplace=True)
         )
 
         # 결합 및 보상 예측 레이어 (더 작은 모델로 변경)
         self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128 + 64, 512),
+            nn.Linear(128 + 128 + 64, 256),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
-            nn.Linear(512, 256),
-            nn.ReLU(inplace=True),
+            nn.BatchNorm1d(256),
             nn.Linear(256, 128),
             nn.ReLU(inplace=True),
             nn.Linear(128, 64),
@@ -47,11 +47,13 @@ class RewardModel(nn.Module):
         obs_features = self.obstacle_encoder.encoder(obs)
         obs_features = self.dropout(obs_features)
         obs_features = torch.flatten(obs_features, start_dim=1)
+        obs_features = nn.BatchNorm1d(128)(obs_features)
         obs_features = self.obstacle_encoder.fc_enc(obs_features)
         
         path_features = self.path_encoder.encoder(path)
         path_features = self.dropout(path_features)
         path_features = torch.flatten(path_features, start_dim=1)
+        path_features = nn.BatchNorm1d(128)(path_features)
         path_features = self.path_encoder.fc_enc(path_features)
         
         drone_features = self.drone_info_encoder(drone_info)
