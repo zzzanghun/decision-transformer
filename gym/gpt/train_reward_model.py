@@ -429,6 +429,7 @@ if __name__ == '__main__':
     print(f"드론 정보 차원: {drone_info_dim}")
     
     reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.2)
+    # reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
     
     # 모델 학습
     train_losses, val_losses = train_reward_model(
