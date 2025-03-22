@@ -284,11 +284,11 @@ def get_traj():
     
     # ChatGPT 호출 제한 및 pkl 저장 관련 변수
     gpt_call_count = 0
-    gpt_call_limit = 10000  # 10000번 이상이면 중단
+    gpt_call_limit = 20000  # 10000번 이상이면 중단
 
     # 에피소드 50개 단위로 저장
     episode_buffer = []
-    save_count = 0
+    save_count = 7
 
     random_seed = 42  # 원하는 시드 값 (아무 정수나 사용 가능)
     random.seed(random_seed)
@@ -297,7 +297,8 @@ def get_traj():
     episode_indices = list(range(num_episodes))
     random.shuffle(episode_indices)  # 인덱스 랜덤하게 섞기
 
-    for i in episode_indices:
+    for idx in range(280, min(280 + 1000, num_episodes)):
+        i = episode_indices[idx]
         episode = copy.deepcopy(trajectories[i])
         episode['actions'] = episode['actions'][:, action_indices]
 
@@ -361,8 +362,8 @@ def get_traj():
 
             runlength_data = convert_to_runlength(obs_observation)
 
-            vx_str = str([round(float(vx[i]), 3) for i in range(len(vx)) if i % 10 == 0]).replace(' ', '')
-            vy_str = str([round(float(vy[i]), 3) for i in range(len(vy)) if i % 10 == 0]).replace(' ', '')
+            vx_str = str([round(float(vx[k]), 3) for k in range(len(vx)) if k % 10 == 0]).replace(' ', '')
+            vy_str = str([round(float(vy[k]), 3) for k in range(len(vy)) if k % 10 == 0]).replace(' ', '')
 
             # prompt JSON 업데이트
             prompt = update_prompt_en_json(
