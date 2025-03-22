@@ -4,7 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 class RewardModel(nn.Module):
-    def __init__(self, obstacle_encoder, path_encoder, drone_info_dim=46, latent_dim=128):
+    def __init__(self, obstacle_encoder, path_encoder, drone_info_dim=46, latent_dim=128, dropout_rate=0.3):
         super(RewardModel, self).__init__()
 
         # 오토인코더에서 인코더 부분만 사용
@@ -16,24 +16,30 @@ class RewardModel(nn.Module):
         for param in self.path_encoder.parameters():
             param.requires_grad = False  # 사전 학습된 가중치 고정
 
-        # 드론 정보 인코더
+        # 드론 정보 인코더 (더 작은 모델로 변경)
         self.drone_info_encoder = nn.Sequential(
-            nn.Linear(drone_info_dim, 256),
+            nn.Linear(drone_info_dim, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
-            nn.Linear(256, 128)
+            nn.Dropout(dropout_rate),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True)
         )
 
-        # 결합 및 보상 예측 레이어
+        # 결합 및 보상 예측 레이어 (더 작은 모델로 변경)
         self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128 + 128, 512),
+            nn.Linear(128 + 128 + 64, 128),
+            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
-            nn.Linear(512, 256),
-            nn.ReLU(inplace=True),
-            nn.Linear(256, 128),
-            nn.ReLU(inplace=True),
+            nn.Dropout(dropout_rate),
             nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
-            nn.Linear(64, 1),
+            nn.Dropout(dropout_rate),
+            nn.Linear(64, 32),
+            nn.ReLU(inplace=True),
+            nn.Linear(32, 1),
             nn.Sigmoid()
         )
 
@@ -50,7 +56,7 @@ class RewardModel(nn.Module):
         drone_features = self.drone_info_encoder(drone_info)
         
         # 특성 결합
-        combined_features = torch.cat([obs_features, path_features, drone_features], dim=-1)
+        combined_features = torch.cat([obs_features, path_features, drone_features], dim=1)
         
         # 보상 예측
         reward = self.reward_predictor(combined_features)
