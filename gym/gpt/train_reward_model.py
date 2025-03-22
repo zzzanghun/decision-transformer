@@ -228,7 +228,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
     
     # 손실 함수 및 옵티마이저 설정
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
@@ -435,7 +435,7 @@ if __name__ == '__main__':
         train_dataloader, 
         val_dataloader, 
         epochs=1000000, 
-        lr=1e-4
+        lr=1e-5
     )
     
     # 학습된 모델 로드 (최고 성능 모델)
