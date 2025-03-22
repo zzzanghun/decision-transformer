@@ -36,13 +36,17 @@ class RewardModel(nn.Module):
             nn.Sigmoid()
         )
 
+        self.dropout = nn.Dropout(dropout_rate)
+
     def forward(self, drone_info, obs, path):
         # 각 입력 처리
         obs_features = self.obstacle_encoder.encoder(obs)
+        obs_features = self.dropout(obs_features)
         obs_features = torch.flatten(obs_features, start_dim=1)
         obs_features = self.obstacle_encoder.fc_enc(obs_features)
         
         path_features = self.path_encoder.encoder(path)
+        path_features = self.dropout(path_features)
         path_features = torch.flatten(path_features, start_dim=1)
         path_features = self.path_encoder.fc_enc(path_features)
         
