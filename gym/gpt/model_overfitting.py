@@ -37,17 +37,22 @@ class RewardModelOverfitting(nn.Module):
             nn.Sigmoid()
         )
 
+        self.dropout = nn.Dropout(0.3)
+
     def forward(self, drone_info, obs, path):
         # 각 입력 처리
         obs_features = self.obstacle_encoder.encoder(obs)
         obs_features = torch.flatten(obs_features, start_dim=1)
         obs_features = self.obstacle_encoder.fc_enc(obs_features)
+        obs_features = self.dropout(obs_features)
         
         path_features = self.path_encoder.encoder(path)
         path_features = torch.flatten(path_features, start_dim=1)
         path_features = self.path_encoder.fc_enc(path_features)
+        path_features = self.dropout(path_features)
         
         drone_features = self.drone_info_encoder(drone_info)
+        drone_features = self.dropout(drone_features)
         
         # 특성 결합
         combined_features = torch.cat([obs_features, path_features, drone_features], dim=-1)
