@@ -19,6 +19,7 @@ print(f"프로젝트 경로: {PROJECT_PATH}")
 from auto_encoder.model import CostmapConvAutoencoder
 from gpt.model import RewardModel
 from gpt.model_overfitting import RewardModelOverfitting
+from gpt.get_reward_from_gpt import reconstruct_from_runlength
 
 # 시드 설정
 SEED = 42
@@ -28,9 +29,89 @@ if torch.cuda.is_available():
     torch.cuda.manual_seed(SEED)
     torch.backends.cudnn.deterministic = True
 
+# 텐서 출력 설정 - 모든 요소 표시 (수정된 버전)
+torch.set_printoptions(threshold=float('inf'), linewidth=10000)  # 무한대 대신 큰 정수 사용
+np.set_printoptions(threshold=np.inf, linewidth=10000)  # 무한대 대신 큰 정수 사용
+
 # 장치 설정
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"사용 장치: {device}")
+
+
+def convert_to_runlength(obs_observation):
+    unique_values = [val for val in np.unique(obs_observation) if val != 0]
+    runlength_data = []
+    
+    for value in unique_values:
+        positions = np.argwhere(obs_observation == value)
+        if len(positions) == 0:
+            continue
+        
+        # 값이 2인 경우 (궤적) - 직선으로 처리
+        if value == 2:
+            if len(positions) <= 2:
+                min_row = np.min(positions[:, 0])
+                max_row = np.max(positions[:, 0])
+                min_col = np.min(positions[:, 1])
+                max_col = np.max(positions[:, 1])
+                
+                runlength_data.append({
+                    "rows": f"{min_row}-{max_row}",
+                    "cols": f"{min_col}-{max_col}",
+                    "value": "2"
+                })
+            else:
+                # 점이 3개 이상이면 각 점을 개별적으로 처리
+                for pos in positions:
+                    row, col = pos
+                    runlength_data.append({
+                        "rows": f"{row}-{row}",
+                        "cols": f"{col}-{col}",
+                        "value": "2"
+                    })
+        else:
+            # 값이 1인 경우 (장애물) - 기존 방식대로 처리
+            positions = positions[np.lexsort((positions[:, 1], positions[:, 0]))]
+            regions = []
+            visited = set()
+            
+            for pos in positions:
+                row, col = pos
+                if (row, col) in visited:
+                    continue
+                    
+                min_row, max_row = row, row
+                min_col, max_col = col, col
+                queue = [(row, col)]
+                visited.add((row, col))
+                
+                while queue:
+                    r, c = queue.pop(0)
+                    for dr, dc in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nr, nc = r + dr, c + dc
+                        if (nr, nc) not in visited and 0 <= nr < obs_observation.shape[0] and 0 <= nc < obs_observation.shape[1]:
+                            if obs_observation[nr, nc] == value:
+                                queue.append((nr, nc))
+                                visited.add((nr, nc))
+                                min_row = min(min_row, nr)
+                                max_row = max(max_row, nr)
+                                min_col = min(min_col, nc)
+                                max_col = max(max_col, nc)
+                
+                regions.append({
+                    "rows": f"{min_row}-{max_row}",
+                    "cols": f"{min_col}-{max_col}",
+                    "value": str(int(value))
+                })
+            
+            merged_regions = []
+            for region in regions:
+                if not any(r["rows"] == region["rows"] and r["cols"] == region["cols"] and r["value"] == region["value"] for r in merged_regions):
+                    merged_regions.append(region)
+            
+            runlength_data.extend(merged_regions)
+
+    return runlength_data
 
 class TrajectoryDataset(Dataset):
     """
@@ -114,6 +195,9 @@ class TrajectoryDataset(Dataset):
                 obs_observation = episode['observations'][j][:, :100*100].reshape(100, 100)
                 path_observation = np.zeros_like(obs_observation)
 
+                runlength_data = convert_to_runlength(obs_observation)
+                obs_observation = reconstruct_from_runlength(runlength_data)
+
                 x0, y0 = 5, 5
                 vx = []
                 vy = []
@@ -129,7 +213,7 @@ class TrajectoryDataset(Dataset):
                     ix = int(round(50 - (x - x0) * 10))
                     iy = int(round(50 - (y - y0) * 10))
                     if 0 <= ix < 100 and 0 <= iy < 100:
-                        path_observation[ix, iy] = 1
+                        path_observation[ix, iy] = 1.0
 
                     # 0.1초 간격으로 속도 정보 저장
                     if abs((t * 10) % 1) < 1e-10:
