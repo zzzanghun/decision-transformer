@@ -237,12 +237,14 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     )
     
     # wandb 초기화
-    wandb.init(project="reward-model-training", config={
-        "epochs": epochs,
-        "batch_size": train_loader.batch_size,
-        "learning_rate": lr,
-        "l1_lambda": l1_lambda,
-        "use_l1_regularization": use_l1_regularization
+    wandb.init(project="reward-model-training", 
+               name=f"use_l1={use_l1_regularization}, batch_size={train_loader.batch_size}",
+               config={
+                "epochs": epochs,
+                "batch_size": train_loader.batch_size,
+                "learning_rate": lr,
+                "l1_lambda": l1_lambda,
+                "use_l1_regularization": use_l1_regularization
     })
     
     # 학습 기록
@@ -444,8 +446,8 @@ if __name__ == '__main__':
     drone_info_dim = sample_batch['drone_info'].shape[1]
     print(f"드론 정보 차원: {drone_info_dim}")
     
-    reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.2)
-    # reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
+    # reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.2)
+    reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
     
     # 모델 학습
     train_losses, val_losses = train_reward_model(
