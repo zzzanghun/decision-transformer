@@ -4,6 +4,13 @@ import numpy as np
 import pickle
 import time
 import os
+import sys
+PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(PROJECT_PATH)
+
+from gpt.get_reward_from_gpt import reconstruct_from_runlength
+from gpt.train_reward_model import convert_to_runlength
+
 
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
@@ -27,8 +34,8 @@ class CostmapDataset(Dataset):
         """
         self.data = []
         
-        # dataset_path = f'{PROJECT_PATH}/data/combined_data.pkl'
-        dataset_path = f'{PROJECT_PATH}/data/ego/ego-planner-data_17.pkl'
+        dataset_path = f'{PROJECT_PATH}/data/combined_data.pkl'
+        # dataset_path = f'{PROJECT_PATH}/data/ego/ego-planner-data_17.pkl'
         print(PROJECT_PATH)
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
@@ -63,25 +70,27 @@ class CostmapDataset(Dataset):
                     direction_vector = direction_vector / norm
                 trajectories[i]['observations'][j][:, 100*100:100*100 + 2] = direction_vector
                 obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
-                obs_observation = np.zeros_like(obs_observation)
-                x0, y0 = 5, 5
-                t_values = np.arange(0, 1.5 + 0.01, 0.01)
-                for t in t_values:
-                    x = x0 + v_x * t + 0.5 * a_x * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
-                    y = y0 + v_y * t + 0.5 * a_y * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
+                obs_observation = convert_to_runlength(obs_observation)
+                obs_observation = reconstruct_from_runlength(obs_observation)
+                # obs_observation = np.zeros_like(obs_observation)
+                # x0, y0 = 5, 5
+                # t_values = np.arange(0, 1.5 + 0.01, 0.01)
+                # for t in t_values:
+                #     x = x0 + v_x * t + 0.5 * a_x * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
+                #     y = y0 + v_y * t + 0.5 * a_y * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
                     
-                    # grid map의 인덱스로 변환 (여기서는 반올림하여 정수 인덱스로 변환)
-                    ix = int(round(50 - (x - x0) * 10))
-                    iy = int(round(50 - (y - y0) * 10))
+                #     # grid map의 인덱스로 변환 (여기서는 반올림하여 정수 인덱스로 변환)
+                #     ix = int(round(50 - (x - x0) * 10))
+                #     iy = int(round(50 - (y - y0) * 10))
                     
-                    # grid map의 범위 내에 있는 경우에만 값을 2로 지정
-                    if 0 <= ix < 100 and 0 <= iy < 100:
-                        obs_observation[ix, iy] = 1.0  # 일반적으로 행이 y축, 열이 x축을 나타냄
+                #     # grid map의 범위 내에 있는 경우에만 값을 2로 지정
+                #     if 0 <= ix < 100 and 0 <= iy < 100:
+                #         obs_observation[ix, iy] = 1.0  # 일반적으로 행이 y축, 열이 x축을 나타냄
 
-                # 랜덤 선분 추가 (데이터 증강)
-                if add_random_lines:
-                    obs_observation = self._add_random_lines(obs_observation)
-                # print(obs_observation, "@#@@@@@@")
+                # # 랜덤 선분 추가 (데이터 증강)
+                # if add_random_lines:
+                #     obs_observation = self._add_random_lines(obs_observation)
+                # # print(obs_observation, "@#@@@@@@")
 
                 self.data.append(obs_observation.copy())
 

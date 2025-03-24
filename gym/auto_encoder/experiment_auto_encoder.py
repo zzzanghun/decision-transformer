@@ -112,7 +112,7 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
             folder_name = f"{PROJECT_PATH}/model/auto_encoder"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/autoencoder_with_traj_{epoch}.pth")
+            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/autoencoder_with_runlength_{epoch}.pth")
 
 
 if __name__ == "__main__":
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     # 2) 모델 생성
     model = CostmapConvAutoencoder(latent_dim=128)
-    model.load_state_dict(torch.load(f"{PROJECT_PATH}/model/auto_encoder/model_900.pth"))
+    model.load_state_dict(torch.load(f"{PROJECT_PATH}/model/model_900.pth"))
     
     wandb.init(
             project='auto-encoder'
