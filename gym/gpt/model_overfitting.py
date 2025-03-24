@@ -37,6 +37,7 @@ class RewardModelOverfitting(nn.Module):
         )
 
         self.dropout = nn.Dropout(0.3)
+        self.batch_norm = nn.BatchNorm1d(128)
 
     def forward(self, drone_info, obs, path):
         # 각 입력 처리
@@ -44,14 +45,17 @@ class RewardModelOverfitting(nn.Module):
         obs_features = torch.flatten(obs_features, start_dim=1)
         obs_features = self.obstacle_encoder.fc_enc(obs_features)
         obs_features = self.dropout(obs_features)
-        
+        obs_features = self.batch_norm(obs_features)
+
         path_features = self.path_encoder.encoder(path)
         path_features = torch.flatten(path_features, start_dim=1)
         path_features = self.path_encoder.fc_enc(path_features)
         path_features = self.dropout(path_features)
-        
+        path_features = self.batch_norm(path_features)
+
         drone_features = self.drone_info_encoder(drone_info)
         drone_features = self.dropout(drone_features)
+        drone_features = self.batch_norm(drone_features)
         
         # 특성 결합
         combined_features = torch.cat([obs_features, path_features, drone_features], dim=-1)
