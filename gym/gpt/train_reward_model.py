@@ -58,7 +58,7 @@ class TrajectoryDataset(Dataset):
         데이터셋을 로드하고 전처리합니다.
         """
         print(f"데이터셋 로드 중: {dataset_path}")
-        for i in range(1, 8):
+        for i in range(1, 13):
             dataset_path = f"{PROJECT_PATH}/data/GPT_reward/gtp_reward_data_{i}.pkl"
             if i == 1:
                 with open(dataset_path, 'rb') as f:
@@ -208,7 +208,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5, use_l1_regularization=True):
     """
     보상 모델 학습 함수
     
@@ -242,6 +242,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         "batch_size": train_loader.batch_size,
         "learning_rate": lr,
         "l1_lambda": l1_lambda,
+        "use_l1_regularization": use_l1_regularization
     })
     
     # 학습 기록
@@ -276,7 +277,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
                 l1_reg += torch.sum(torch.abs(param))
             
             # 총 손실 = MSE + L1 정규화
-            loss = mse_loss + (1e-6 * l1_reg)
+            if use_l1_regularization:
+                loss = mse_loss + (1e-6 * l1_reg)
+            else:
+                loss = mse_loss
             
             # 역전파 및 최적화
             loss.backward()
@@ -340,6 +344,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
                 os.makedirs(folder_name)
             model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_best.pth"
             torch.save(model.state_dict(), model_save_path)
+            print("최고 성능 모델 저장")
         
         # 주기적으로 모델 저장
         if (epoch + 1) % 100 == 0:
@@ -448,7 +453,8 @@ if __name__ == '__main__':
         train_dataloader, 
         val_dataloader, 
         epochs=1000000, 
-        lr=1e-5
+        lr=1e-5,
+        use_l1_regularization=False
     )
     
     # 학습된 모델 로드 (최고 성능 모델)
