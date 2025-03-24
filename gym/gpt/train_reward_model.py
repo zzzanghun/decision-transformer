@@ -424,7 +424,7 @@ def visualize_predictions(model, dataloader, num_samples=5):
 
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=128)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=32)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
