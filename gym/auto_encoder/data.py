@@ -144,10 +144,6 @@ class CostmapDataset(Dataset):
 
     def __getitem__(self, idx):
         # (100,100)을 (1,100,100)로 확장
-        costmap = self.data[idx]
-        costmap = np.expand_dims(costmap, axis=0)  # (1, 100, 100)
+        costmap = torch.tensor(self.data[idx], dtype=torch.float32).unsqueeze(0)
         
-        # 텐서 변환
-        costmap_tensor = torch.from_numpy(costmap)
-        
-        return costmap_tensor
+        return costmap
