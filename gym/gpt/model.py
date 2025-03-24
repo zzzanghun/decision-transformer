@@ -37,8 +37,7 @@ class RewardModel(nn.Module):
             nn.BatchNorm1d(128),
             nn.Linear(128, 64),
             nn.ReLU(inplace=True),
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+            nn.Linear(64, 1)
         )
 
         self.dropout = nn.Dropout(dropout_rate)
