@@ -208,7 +208,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5):
     """
     보상 모델 학습 함수
     
@@ -224,6 +224,8 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         학습 에폭 수
     lr : float
         학습률
+    l1_lambda : float
+        L1 정규화 강도
     """
     model.to(device)
     
@@ -239,6 +241,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         "epochs": epochs,
         "batch_size": train_loader.batch_size,
         "learning_rate": lr,
+        "l1_lambda": l1_lambda,
     })
     
     # 학습 기록
@@ -264,8 +267,16 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
             # 순전파
             predicted_reward = model(drone_info, obs, path)
             
-            # 손실 계산
-            loss = criterion(predicted_reward, target_reward)
+            # MSE 손실 계산
+            mse_loss = criterion(predicted_reward, target_reward)
+            
+            # L1 정규화 계산
+            l1_reg = 0
+            for param in model.parameters():
+                l1_reg += torch.sum(torch.abs(param))
+            
+            # 총 손실 = MSE + L1 정규화
+            loss = mse_loss + (1e-6 * l1_reg)
             
             # 역전파 및 최적화
             loss.backward()
@@ -278,7 +289,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         train_losses.append(train_loss)
         
         # 검증 모드
-
         if epoch % 10 == 0:
             model.eval()
             val_loss = 0.0
@@ -319,6 +329,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4)
         wandb.log({
             "epoch": epoch + 1,
             "train_loss": math.sqrt(train_loss),
+            "l1_reg": l1_reg.item(),
         })
         
         # 최고 성능 모델 저장
