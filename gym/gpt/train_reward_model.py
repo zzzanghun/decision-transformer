@@ -345,23 +345,26 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         # 최고 성능 모델 저장
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            folder_name = f"{PROJECT_PATH}/model/reward_model"
+            folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_best.pth"
+            model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_best.pth"
             torch.save(model.state_dict(), model_save_path)
             print("최고 성능 모델 저장")
         
         # 주기적으로 모델 저장
         if (epoch + 1) % 100 == 0:
-            folder_name = f"{PROJECT_PATH}/model/reward_model"
+            folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_epoch_{epoch+1}.pth"
+            model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_epoch_{epoch+1}.pth"
             torch.save(model.state_dict(), model_save_path)
     
     # 학습 완료 후 최종 모델 저장
-    model_save_path = f"{PROJECT_PATH}/model/reward_model/reward_model_final.pth"
+    folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+    model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_final.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"최종 모델 저장됨: {model_save_path}")
     
