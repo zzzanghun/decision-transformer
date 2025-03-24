@@ -19,6 +19,7 @@ print(f"프로젝트 경로: {PROJECT_PATH}")
 from auto_encoder.model import CostmapConvAutoencoder
 from gpt.model import RewardModel
 from gpt.model_overfitting import RewardModelOverfitting
+from gpt.model_combined import RewardModelCombined
 from gpt.get_reward_from_gpt import reconstruct_from_runlength
 
 # 시드 설정
@@ -36,6 +37,108 @@ np.set_printoptions(threshold=np.inf, linewidth=10000)  # 무한대 대신 큰 �
 # 장치 설정
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"사용 장치: {device}")
+
+
+def filter_abnormal_rewards_via_velocity(target_direction, current_velocity, 
+                                        predicted_x_velocity, predicted_y_velocity, 
+                                        reward_value):
+    # 방향 벡터와 속도 벡터를 numpy 배열로 변환
+    target_direction = np.array(target_direction, dtype=float)
+    current_velocity = np.array(current_velocity, dtype=float)
+    
+    # 벡터 정규화
+    target_direction_norm = np.linalg.norm(target_direction)
+    current_velocity_norm = np.linalg.norm(current_velocity)
+    
+    # 코사인 유사도 계산 (0으로 나누기 방지)
+    if target_direction_norm > 0 and current_velocity_norm > 0:
+        cos_sim = np.dot(target_direction, current_velocity) / (target_direction_norm * current_velocity_norm)
+    else:
+        cos_sim = 0
+    
+    # 현재 속도 크기 계산
+    velocity_magnitude = np.linalg.norm(current_velocity)
+    
+    # 예측 속도 처리
+    if isinstance(predicted_x_velocity, (list, np.ndarray)) and isinstance(predicted_y_velocity, (list, np.ndarray)):
+        if len(predicted_x_velocity) > 0 and len(predicted_y_velocity) > 0:
+            # 예측 속도 벡터 생성
+            predicted_velocities = np.column_stack((predicted_x_velocity, predicted_y_velocity))
+            
+            # 예측 속도의 평균 크기 계산
+            predicted_velocity_magnitudes = np.linalg.norm(predicted_velocities, axis=1)
+            
+            # 예측 속도와 타겟 방향의 정렬 정도 계산
+            if target_direction_norm > 0:
+                # 각 예측 속도와 타겟 방향 사이의 코사인 유사도 계산
+                predicted_direction_alignments = []
+                for vel in predicted_velocities:
+                    vel_norm = np.linalg.norm(vel)
+                    if vel_norm > 0:
+                        alignment = np.dot(vel, target_direction) / (vel_norm * target_direction_norm)
+                        predicted_direction_alignments.append(alignment)
+    
+    # 1. 코사인 유사도 기반 필터링
+    if cos_sim > 0.96 and reward_value < 0.3:
+        return False
+    
+    # 2. 속도 크기 기반 필터링
+    if velocity_magnitude > 0.7 and reward_value < 0.3:
+        return False
+    
+    if any(alignment > 0.96 for alignment in predicted_direction_alignments) and reward_value < 0.3:
+        return False
+    
+    if any(velocity > 0.7 for velocity in predicted_velocity_magnitudes) and reward_value < 0.3:
+        return False
+    
+    return True
+
+def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_value):
+    """
+    장애물 행렬과 경로 행렬, 그리고 보상 값을 기반으로 비정상적인 보상을 필터링합니다.
+    
+    Parameters:
+    -----------
+    obs_matrix : numpy.ndarray
+        100x100 크기의 장애물 행렬 (1은 장애물, 0은 빈 공간)
+    path_matrix : numpy.ndarray
+        100x100 크기의 경로 행렬 (1은 경로, 0은 빈 공간)
+    reward_value : float
+        GPT가 제공한 보상 값 (0~1 사이)
+        
+    Returns:
+    --------
+    bool
+        True: 정상적인 보상, False: 비정상적인 보상
+    float
+        장애물과 경로 사이의 최소 거리
+    """
+    # 장애물(1)과 경로(1) 위치 찾기
+    obstacle_positions = np.argwhere(obs_matrix == 1)
+    path_positions = np.argwhere(path_matrix == 1)
+    
+    # 장애물이나 경로가 없는 경우
+    if len(obstacle_positions) == 0 or len(path_positions) == 0:
+        return True
+    
+    # 최소 거리 계산 (맨해튼 거리)
+    min_distance = float('inf')
+    for obs_pos in obstacle_positions:
+        for path_pos in path_positions:
+            # 맨해튼 거리
+            dist = abs(obs_pos[0] - path_pos[0]) + abs(obs_pos[1] - path_pos[1])
+            # 유클리드 거리를 사용하려면 아래 주석을 해제
+            # dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
+            min_distance = min(min_distance, dist)
+    
+    # 필터링 조건
+    if min_distance <= 3 and reward_value < 0.3:
+        # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
+        return False
+    
+    # 정상적인 보상
+    return True
 
 
 def convert_to_runlength(obs_observation):
@@ -173,17 +276,17 @@ class TrajectoryDataset(Dataset):
                 drone_info_observation = []
 
                 drone_info = episode['observations'][j][:, 100*100:]
-                v_x = drone_info[0][2]         # 현재 x축 속도
-                v_y = drone_info[0][3]         # 현재 y축 속도
-                a_x = drone_info[0][6]         # 현재 x축 가속도
-                a_y = drone_info[0][7]         # 현재 y축 가속도
+                v_x = copy.deepcopy(drone_info[0][2])         # 현재 x축 속도
+                v_y = copy.deepcopy(drone_info[0][3])         # 현재 y축 속도
+                a_x = copy.deepcopy(drone_info[0][6])         # 현재 x축 가속도
+                a_y = copy.deepcopy(drone_info[0][7])         # 현재 y축 가속도
 
                 # 목표방향 정규화
                 direction_vector = episode['observations'][j][:, 100*100:100*100 + 2]
                 norm = np.linalg.norm(direction_vector)
                 if norm != 0:
                     direction_vector = direction_vector / norm
-                episode['observations'][j][:, 100*100:100*100 + 2] = direction_vector
+                episode['observations'][j][:, 100*100:100*100 + 2] = copy.deepcopy(direction_vector)
 
                 drone_info_observation.append(direction_vector[0][0])
                 drone_info_observation.append(direction_vector[0][1])
@@ -219,6 +322,8 @@ class TrajectoryDataset(Dataset):
                     if abs((t * 10) % 1) < 1e-10:
                         drone_info_observation.append(v_x_t)
                         drone_info_observation.append(v_y_t)
+                        vx.append(v_x_t)
+                        vy.append(v_y_t)
 
                 # 임의의 보상 값 생성 (실제로는 전문가 피드백이나 다른 방법으로 얻어야 함)
                 # 여기서는 예시로 경로의 부드러움에 따라 보상 부여
@@ -226,10 +331,16 @@ class TrajectoryDataset(Dataset):
                 
                 drone_info_observation = np.array(drone_info_observation)
 
-                self.drone_info_data.append(drone_info_observation)
-                self.obs_data.append(obs_observation)
-                self.path_data.append(path_observation)
-                self.reward_data.append(reward_value)
+                # filter_abnormal_rewards via obs and path
+                filter_obs_path = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, reward_value)
+                filter_velocity = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
+                                                                       vx, vy, reward_value)
+
+                if filter_obs_path and filter_velocity:
+                    self.drone_info_data.append(copy.deepcopy(drone_info_observation))
+                    self.obs_data.append(copy.deepcopy(obs_observation))
+                    self.path_data.append(copy.deepcopy(path_observation))
+                    self.reward_data.append(copy.deepcopy(reward_value))
         
         print(f"데이터 로드 완료: {len(self.drone_info_data)} 샘플")
 
@@ -253,7 +364,7 @@ class TrajectoryDataset(Dataset):
         }
 
 
-def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
+def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8):
     """
     데이터로더를 생성하여 반환합니다.
     
@@ -276,6 +387,8 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
     val_size = len(dataset) - train_size
+    print(f"dataset 길이: {len(dataset)}")
+    print(f"train_size: {train_size}, val_size: {val_size}")
     generator = torch.Generator().manual_seed(50)
     train_dataset, val_dataset = torch.utils.data.random_split(
         dataset, [train_size, val_size], generator=generator
@@ -316,9 +429,9 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     # 손실 함수 및 옵티마이저 설정
     criterion = nn.MSELoss()
     if use_l2_regularization:
-        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+        optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr, weight_decay=1e-4)
     else:
-        optimizer = optim.Adam(model.parameters(), lr=lr)
+        optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
@@ -407,7 +520,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
             val_losses.append(val_loss)
             
             # 학습률 스케줄러 업데이트
-            scheduler.step(val_loss)
+            # scheduler.step(val_loss)
 
             print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}")
 
@@ -458,71 +571,9 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     return train_losses, val_losses
 
 
-def visualize_predictions(model, dataloader, num_samples=5):
-    """
-    모델 예측 시각화 함수
-    
-    Parameters:
-    -----------
-    model : RewardModel
-        학습된 모델
-    dataloader : DataLoader
-        데이터로더
-    num_samples : int
-        시각화할 샘플 수
-    """
-    model.to(device)
-    model.eval()
-    
-    samples = []
-    for batch in dataloader:
-        samples.append(batch)
-        if len(samples) * dataloader.batch_size >= num_samples:
-            break
-    
-    plt.figure(figsize=(15, num_samples * 5))
-    
-    sample_idx = 0
-    for batch in samples:
-        drone_info = batch['drone_info'].to(device)
-        obs = batch['obs'].to(device)
-        path = batch['path'].to(device)
-        target_reward = batch['reward'].to(device)
-        
-        with torch.no_grad():
-            predicted_reward = model(drone_info, obs, path).cpu().numpy().flatten()
-        
-        target_reward = target_reward.cpu().numpy()
-        
-        for i in range(min(dataloader.batch_size, len(drone_info))):
-            if sample_idx >= num_samples:
-                break
-                
-            plt.subplot(num_samples, 3, sample_idx * 3 + 1)
-            plt.imshow(obs[i, 0].cpu().numpy(), cmap='gray')
-            plt.title(f"장애물 맵 {sample_idx+1}")
-            plt.axis('off')
-            
-            plt.subplot(num_samples, 3, sample_idx * 3 + 2)
-            plt.imshow(path[i, 0].cpu().numpy(), cmap='gray')
-            plt.title(f"경로 맵 {sample_idx+1}")
-            plt.axis('off')
-            
-            plt.subplot(num_samples, 3, sample_idx * 3 + 3)
-            plt.bar(['실제 보상', '예측 보상'], [target_reward[i], predicted_reward[i]])
-            plt.title(f"보상 비교 {sample_idx+1}")
-            plt.ylim(0, 1)
-            
-            sample_idx += 1
-    
-    plt.tight_layout()
-    plt.savefig(f"{PROJECT_PATH}/gym/model/reward_model_predictions.png")
-    plt.show()
-
-
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=32)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
@@ -537,7 +588,8 @@ if __name__ == '__main__':
     drone_info_dim = sample_batch['drone_info'].shape[1]
     print(f"드론 정보 차원: {drone_info_dim}")
     
-    # reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.2)
+    # reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.3)
+    # reward_model = RewardModelCombined(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.1)
     reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
     
     # 모델 학습
@@ -547,20 +599,6 @@ if __name__ == '__main__':
         val_dataloader, 
         epochs=1000000, 
         lr=1e-5,
-        use_l1_regularization=False,
+        use_l1_regularization=True,
         use_l2_regularization=True
     )
-    
-    # 학습된 모델 로드 (최고 성능 모델)
-    reward_model.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/reward_model_best.pth"))
-    
-    # 예측 시각화
-    visualize_predictions(reward_model, val_dataloader, num_samples=5)
-    
-    # 샘플 데이터 확인
-    sample_batch = next(iter(train_dataloader))
-    print("드론 정보 형태:", sample_batch['drone_info'].shape)
-    print("장애물 맵 형태:", sample_batch['obs'].shape)
-    print("경로 맵 형태:", sample_batch['path'].shape)
-    print("보상 형태:", sample_batch['reward'].shape)
-

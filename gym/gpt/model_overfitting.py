@@ -30,20 +30,26 @@ class RewardModelOverfitting(nn.Module):
 
         # 결합 및 보상 예측 레이어
         self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128 + 128, 512),
-            nn.ReLU(inplace=True),
-            # nn.Dropout(0.3),
+            nn.Linear(128 + 128 + drone_info_dim, 512),
             nn.BatchNorm1d(512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
             nn.Linear(512, 256),
-            nn.ReLU(inplace=True),
-            # nn.Dropout(0.3),
             nn.BatchNorm1d(256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
             nn.Linear(256, 128),
-            nn.ReLU(inplace=True),
-            # nn.Dropout(0.3),
             nn.BatchNorm1d(128),
-            nn.Linear(128, 64),
             nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),  # 마지막 레이어 전에는 더 낮은 드롭아웃 비율
+            
             nn.Linear(64, 1)
         )
 
@@ -52,11 +58,14 @@ class RewardModelOverfitting(nn.Module):
 
     def forward(self, drone_info, obs, path):
         # 각 입력 처리
-        self.obstacle_encoder.eval()
-        self.path_encoder.eval()
-        obs_features = self.obstacle_encoder.encoder(obs)
-        obs_features = torch.flatten(obs_features, start_dim=1)
-        obs_features = self.obstacle_encoder.fc_enc(obs_features)
+        with torch.no_grad():  # 고정된 인코더는 그래디언트 계산 불필요
+            obs_features = self.obstacle_encoder.encoder(obs)
+            obs_features = torch.flatten(obs_features, start_dim=1)
+            obs_features = self.obstacle_encoder.fc_enc(obs_features)
+
+            path_features = self.path_encoder.encoder(path)
+            path_features = torch.flatten(path_features, start_dim=1)
+            path_features = self.path_encoder.fc_enc(path_features)
 
         # obs_before = obs[0].detach().cpu().numpy()
         # print(obs_before.astype(int), "before")
@@ -71,10 +80,6 @@ class RewardModelOverfitting(nn.Module):
         # print("\n차이가 있는 위치 (1은 차이가 있는 위치):")
         # print(differences.astype(int))
 
-        path_features = self.path_encoder.encoder(path)
-        path_features = torch.flatten(path_features, start_dim=1)
-        path_features = self.path_encoder.fc_enc(path_features)
-
         # path_before = path[0].detach().cpu().numpy()
         # print(path_before.astype(int), "before")
         # path_decoder = self.path_encoder.fc_dec(path_features)
@@ -87,13 +92,15 @@ class RewardModelOverfitting(nn.Module):
         # print(f"다른 요소의 개수: {num_differences} / 10000 ({(num_differences/10000)*100:.2f}%)")
         # print("\n차이가 있는 위치 (1은 차이가 있는 위치):")
         # print(differences.astype(int))
-
-        drone_features = self.drone_info_encoder(drone_info)
         
         # 특성 결합
-        combined_features = torch.cat([obs_features, path_features, drone_features], dim=-1)
+        combined_features = torch.cat([obs_features, path_features, drone_info], dim=-1)
         
         # 보상 예측
         reward = self.reward_predictor(combined_features)
         
         return reward
+    
+    def get_trainable_parameters(self):
+        """학습 가능한 파라미터만 반환하는 메서드"""
+        return list(self.drone_info_encoder.parameters()) + list(self.reward_predictor.parameters())
