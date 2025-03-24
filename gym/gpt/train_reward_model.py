@@ -208,7 +208,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.9):
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5, use_l1_regularization=True):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5, use_l1_regularization=True, use_l2_regularization=True):
     """
     보상 모델 학습 함수
     
@@ -231,20 +231,24 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     
     # 손실 함수 및 옵티마이저 설정
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    if use_l2_regularization:
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
     
     # wandb 초기화
     wandb.init(project="reward-model-training", 
-               name=f"use_l1={use_l1_regularization}, batch_size={train_loader.batch_size}",
+               name=f"use_l1={use_l1_regularization}, use_l2={use_l2_regularization}, batch_size={train_loader.batch_size}",
                config={
                 "epochs": epochs,
                 "batch_size": train_loader.batch_size,
                 "learning_rate": lr,
                 "l1_lambda": l1_lambda,
-                "use_l1_regularization": use_l1_regularization
+                "use_l1_regularization": use_l1_regularization,
+                "use_l2_regularization": use_l2_regularization
     })
     
     # 학습 기록
@@ -456,7 +460,8 @@ if __name__ == '__main__':
         val_dataloader, 
         epochs=1000000, 
         lr=1e-5,
-        use_l1_regularization=False
+        use_l1_regularization=False,
+        use_l2_regularization=True
     )
     
     # 학습된 모델 로드 (최고 성능 모델)
