@@ -323,12 +323,12 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
             })
         
         # 로그 출력
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {math.sqrt(train_loss):.6f}")
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {math.sqrt(mse_loss):.6f}")
         
         # wandb 로깅
         wandb.log({
             "epoch": epoch + 1,
-            "train_loss": math.sqrt(train_loss),
+            "train_loss": math.sqrt(mse_loss),
             "l1_reg": l1_reg.item(),
         })
         
