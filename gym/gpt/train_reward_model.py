@@ -79,17 +79,17 @@ def filter_abnormal_rewards_via_velocity(target_direction, current_velocity,
                         predicted_direction_alignments.append(alignment)
     
     # 1. 코사인 유사도 기반 필터링
-    if cos_sim > 0.96 and reward_value < 0.3:
+    if cos_sim > 0.97 and reward_value < 0.5:
         return False
     
     # 2. 속도 크기 기반 필터링
-    if velocity_magnitude > 0.7 and reward_value < 0.3:
+    if velocity_magnitude > 0.7 and reward_value < 0.5:
         return False
     
-    if any(alignment > 0.96 for alignment in predicted_direction_alignments) and reward_value < 0.3:
+    if any(alignment > 0.97 for alignment in predicted_direction_alignments) and reward_value < 0.3:
         return False
     
-    if any(velocity > 0.7 for velocity in predicted_velocity_magnitudes) and reward_value < 0.3:
+    if any(velocity > 0.7 for velocity in predicted_velocity_magnitudes) and reward_value < 0.4:
         return False
     
     return True
@@ -133,7 +133,7 @@ def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_val
             min_distance = min(min_distance, dist)
     
     # 필터링 조건
-    if min_distance <= 3 and reward_value < 0.3:
+    if min_distance <= 3 and reward_value < 0.5:
         # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
         return False
     
