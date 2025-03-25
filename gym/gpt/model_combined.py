@@ -21,9 +21,15 @@ class RewardModelCombined(nn.Module):
         for param in self.path_encoder.parameters():
             param.requires_grad = False  # 사전 학습된 가중치 고정
 
+        self.drone_info_dim = nn.Sequential(
+            nn.Linear(drone_info_dim, 256),
+            nn.ReLU(inplace=True),
+            nn.Linear(256, 128),
+        )
+
         # 드론 정보 인코더
         self.info_path_encoder = nn.Sequential(
-            nn.Linear(drone_info_dim + 128, 128),
+            nn.Linear(128 + 128, 128),
             nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
             nn.Dropout(dropout_rate),
@@ -64,12 +70,14 @@ class RewardModelCombined(nn.Module):
         path_features = self.path_encoder.encoder(path)
         path_features = torch.flatten(path_features, start_dim=1)
         path_features = self.path_encoder.fc_enc(path_features)
+
+        drone_info_features = self.drone_info_dim(drone_info)
         
         # 특성 결합
         obs_path_features = torch.cat([obs_features, path_features], dim=-1)
         obs_path_features = self.obs_path_encoder(obs_path_features)
 
-        info_path_features = torch.cat([drone_info, path_features], dim=-1)
+        info_path_features = torch.cat([drone_info_features, path_features], dim=-1)
         info_path_features = self.info_path_encoder(info_path_features)
 
         combined_features = torch.cat([obs_path_features, info_path_features], dim=-1)
