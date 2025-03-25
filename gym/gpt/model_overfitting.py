@@ -30,7 +30,7 @@ class RewardModelOverfitting(nn.Module):
 
         # 결합 및 보상 예측 레이어
         self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128 + drone_info_dim, 512),
+            nn.Linear(128 + 128 + 128, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
@@ -87,9 +87,11 @@ class RewardModelOverfitting(nn.Module):
         # print(f"다른 요소의 개수: {num_differences} / 10000 ({(num_differences/10000)*100:.2f}%)")
         # print("\n차이가 있는 위치 (1은 차이가 있는 위치):")
         # print(differences.astype(int))
+
+        drone_info_features = self.drone_info_encoder(drone_info)
         
         # 특성 결합
-        combined_features = torch.cat([obs_features, path_features, drone_info], dim=-1)
+        combined_features = torch.cat([obs_features, path_features, drone_info_features], dim=-1)
         
         # 보상 예측
         reward = self.reward_predictor(combined_features)

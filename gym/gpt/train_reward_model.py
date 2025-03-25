@@ -67,7 +67,7 @@ def filter_abnormal_rewards_via_velocity(target_direction, current_velocity,
             
             # 예측 속도의 평균 크기 계산
             predicted_velocity_magnitudes = np.linalg.norm(predicted_velocities, axis=1)
-            mean_predicted_velocity_magnitude = np.mean(predicted_velocity_magnitudes)
+            mean_velocity_magnitude = np.mean(predicted_velocity_magnitudes)
             
             # 예측 속도와 타겟 방향의 정렬 정도 계산
             if target_direction_norm > 0:
@@ -78,33 +78,26 @@ def filter_abnormal_rewards_via_velocity(target_direction, current_velocity,
                     if vel_norm > 0:
                         alignment = np.dot(vel, target_direction) / (vel_norm * target_direction_norm)
                         predicted_direction_alignments.append(alignment)
-                mean_predicted_direction_alignment = np.mean(predicted_direction_alignments)
+
+    mean_alignment = np.mean(predicted_direction_alignments)
+    
+    # 1. 코사인 유사도 기반 필터링
+    if cos_sim > 0.97 and reward_value < 0.5:
+        return False
     
     # 2. 속도 크기 기반 필터링
-    if velocity_magnitude > 0.7 and mean_predicted_velocity_magnitude > 0.65 and reward_value < 0.5:
-        return False, 0.9
+    if velocity_magnitude > 0.7 and reward_value < 0.5:
+        return False
     
-    if mean_predicted_velocity_magnitude > 0.65 and reward_value < 0.5:
-        return False, None
+    if mean_alignment > 0.96 and mean_velocity_magnitude > 0.55 and min_distance <= 3 and reward_value < 0.4:
+        return False
     
-    if mean_predicted_direction_alignment > 0.95 and reward_value < 0.5:
-        return False, None
+    if mean_alignment < 0.9 and reward_value > 0.7 and min_distance > 5:
+        return False
     
-    if mean_predicted_direction_alignment > 0.95 and min_distance < 3 and mean_predicted_velocity_magnitude > 0.5 and reward_value < 0.8:
-        return False, 0.9
-    
-    if mean_predicted_direction_alignment < 0.85 and min_distance > 3 and mean_predicted_velocity_magnitude < 0.4 and reward_value > 0.3:
-        return False, 0.1
-    
-    if min_distance > 15 and mean_predicted_velocity_magnitude > 0.6 and reward_value < 0.5:
-        return False, 0.8
-    
-    if min_distance == 100 and mean_predicted_velocity_magnitude > 0.6 and reward_value < 0.5:
-        return False, 0.8
-    
-    return True, None
+    return True
 
-def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, cur_vel, reward_value):
+def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_value):
     """
     장애물 행렬과 경로 행렬, 그리고 보상 값을 기반으로 비정상적인 보상을 필터링합니다.
     
@@ -127,38 +120,27 @@ def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, cur_vel, r
     # 장애물(1)과 경로(1) 위치 찾기
     obstacle_positions = np.argwhere(obs_matrix == 1)
     path_positions = np.argwhere(path_matrix == 1)
-
-    overlap_positions = np.argwhere((path_matrix == 1) & (obs_matrix == 1))
-
-    cur_vel = np.array(cur_vel, dtype=float)
-    cur_vel = np.linalg.norm(cur_vel)
+    
+    # 장애물이나 경로가 없는 경우
+    if len(obstacle_positions) == 0 and (reward_value > 0.8 or reward_value < 0.2):
+        return True, 100
     
     # 최소 거리 계산 (맨해튼 거리)
     min_distance = float('inf')
-    if len(obstacle_positions) > 0:
-        for obs_pos in obstacle_positions:
-            for path_pos in path_positions:
-                # 맨해튼 거리
-                dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
-                # 유클리드 거리를 사용하려면 아래 주석을 해제
-                # dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
-                min_distance = min(min_distance, dist)
-    else:
-        min_distance = 100
-
+    for obs_pos in obstacle_positions:
+        for path_pos in path_positions:
+            dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
+            min_distance = min(min_distance, dist)
+    
     # 필터링 조건
-    if len(overlap_positions) > 0:
-        return True, min_distance, 1.0
-
-    if min_distance <= 2 and reward_value < 0.5:
+    if min_distance <= 2 and reward_value < 0.6:
         # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
-        return False, min_distance, None
+        return False, min_distance
     
-    if 5 < min_distance <= 10 and reward_value > 0.5:
-        return False, min_distance, None
-    
-    # 정상적인 보상
-    return True, min_distance, None
+    if 5 < min_distance <= 10 and reward_value > 0.7:
+        return False, min_distance
+
+    return True, min_distance
 
 
 def convert_to_runlength(obs_observation):
@@ -254,15 +236,15 @@ class TrajectoryDataset(Dataset):
         self.obs_data = []
         self.path_data = []
         self.reward_data = []
-        
+
         if load_data:
             dataset_path = f"{PROJECT_PATH}/data/reward_model_train_data.pkl"
             with open(dataset_path, 'rb') as f:
                 data = pickle.load(f)
-            self.drone_info_data = data["drone_info"]
-            self.obs_data = data["obs"]
-            self.path_data = data["path"]
-            self.reward_data = data["reward"]
+            self.drone_info_data = data['drone_info']
+            self.obs_data = data['obs']
+            self.path_data = data['path']
+            self.reward_data = data['reward']
         else:
             self._load_data(dataset_path)
     
@@ -334,7 +316,7 @@ class TrajectoryDataset(Dataset):
                 vx = []
                 vy = []
 
-                t_values = np.arange(0, 2.0 + 0.01, 0.01)
+                t_values = np.arange(0, 1.7 + 0.01, 0.01)
                 for t in t_values:
                     x = x0 + v_x * t + 0.5 * a_x * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
                     y = y0 + v_y * t + 0.5 * a_y * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
@@ -361,37 +343,27 @@ class TrajectoryDataset(Dataset):
                 drone_info_observation = np.array(drone_info_observation)
 
                 # filter_abnormal_rewards via obs and path
-                filter_obs_path, min_distance, obs_reward = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, [v_x, v_y], reward_value)
+                filter_obs_path, min_distance = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, reward_value)
+                filter_velocity = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
+                                                                       vx, vy, reward_value, min_distance)
 
-                if obs_reward is None and filter_obs_path:
-                    filter_velocity, vel_reward = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
-                                                                                       vx, vy, reward_value, min_distance)
-
-                    if filter_velocity:
-                        self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                        self.obs_data.append(copy.deepcopy(obs_observation))
-                        self.path_data.append(copy.deepcopy(path_observation))
-                        self.reward_data.append(copy.deepcopy(reward_value))
-                    else:
-                        if vel_reward is not None:
-                            self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                            self.obs_data.append(copy.deepcopy(obs_observation))
-                            self.path_data.append(copy.deepcopy(path_observation))
-                            self.reward_data.append(copy.deepcopy(vel_reward))
-                
-                if obs_reward is not None:
+                if filter_obs_path and filter_velocity:
                     self.drone_info_data.append(copy.deepcopy(drone_info_observation))
                     self.obs_data.append(copy.deepcopy(obs_observation))
                     self.path_data.append(copy.deepcopy(path_observation))
-                    self.reward_data.append(copy.deepcopy(obs_reward))
-                
-        data = {"drone_info": self.drone_info_data, "obs": self.obs_data, "path": self.path_data, "reward": self.reward_data}
-        save_path = f"{PROJECT_PATH}/data/reward_model_train_data.pkl"
-        with open(save_path, 'wb') as f:
+                    self.reward_data.append(copy.deepcopy(reward_value))
+
+        data = {
+            'drone_info': self.drone_info_data,
+            'obs': self.obs_data,
+            'path': self.path_data,
+            'reward': self.reward_data
+        }
+
+        with open(f"{PROJECT_PATH}/data/reward_model_train_data.pkl", 'wb') as f:
             pickle.dump(data, f)
-        print(f"필터링된 데이터가 {save_path}에 저장되었습니다.")
         
-        print(f"데이터 로드 완료: {len(self.drone_info_data)} 샘플")
+        print(f"데이터 저장 및 로드 완료: {len(self.drone_info_data)} 샘플")
 
     def __len__(self):
         return len(self.drone_info_data)
@@ -482,7 +454,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     else:
         optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=5, verbose=True
+        optimizer, mode='min', factor=0.5, patience=30, verbose=True
     )
     
     # wandb 초기화
@@ -568,7 +540,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         val_losses.append(val_loss)
         
         # 학습률 스케줄러 업데이트
-        # scheduler.step(val_loss)
+        scheduler.step(val_loss)
 
         print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}, Train Loss: {math.sqrt(mse_loss):.6f}")
         
@@ -615,7 +587,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
 
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8, load_data=False)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=64, train_ratio=0.8, load_data=False)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
@@ -631,8 +603,8 @@ if __name__ == '__main__':
     print(f"드론 정보 차원: {drone_info_dim}")
     
     # reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.3)
-    reward_model = RewardModelCombined(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.1)
-    # reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
+    # reward_model = RewardModelCombined(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.1)
+    reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
     
     # 모델 학습
     train_losses, val_losses = train_reward_model(
