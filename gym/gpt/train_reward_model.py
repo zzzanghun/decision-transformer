@@ -67,6 +67,7 @@ def filter_abnormal_rewards_via_velocity(target_direction, current_velocity,
             
             # 예측 속도의 평균 크기 계산
             predicted_velocity_magnitudes = np.linalg.norm(predicted_velocities, axis=1)
+            mean_predicted_velocity_magnitude = np.mean(predicted_velocity_magnitudes)
             
             # 예측 속도와 타겟 방향의 정렬 정도 계산
             if target_direction_norm > 0:
@@ -77,24 +78,28 @@ def filter_abnormal_rewards_via_velocity(target_direction, current_velocity,
                     if vel_norm > 0:
                         alignment = np.dot(vel, target_direction) / (vel_norm * target_direction_norm)
                         predicted_direction_alignments.append(alignment)
+                mean_predicted_direction_alignment = np.mean(predicted_direction_alignments)
     
     # 1. 코사인 유사도 기반 필터링
-    if cos_sim > 0.97 and reward_value < 0.5:
+    if cos_sim > 0.9 and velocity_magnitude > 0.6 and reward_value < 0.5:
         return False
     
     # 2. 속도 크기 기반 필터링
     if velocity_magnitude > 0.7 and reward_value < 0.5:
         return False
     
-    if any(alignment > 0.97 for alignment in predicted_direction_alignments) and reward_value < 0.3:
+    if mean_predicted_velocity_magnitude > 0.6 and reward_value < 0.4:
         return False
     
-    if any(velocity > 0.7 for velocity in predicted_velocity_magnitudes) and reward_value < 0.4:
+    if mean_predicted_direction_alignment > 0.95 and reward_value < 0.4:
         return False
     
+    if mean_predicted_velocity_magnitude < 0.4 and velocity_magnitude < 0.4 and reward_value > 0.7:
+        return False
+
     return True
 
-def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_value):
+def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, cur_vel, reward_value):
     """
     장애물 행렬과 경로 행렬, 그리고 보상 값을 기반으로 비정상적인 보상을 필터링합니다.
     
@@ -117,10 +122,13 @@ def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_val
     # 장애물(1)과 경로(1) 위치 찾기
     obstacle_positions = np.argwhere(obs_matrix == 1)
     path_positions = np.argwhere(path_matrix == 1)
+
+    cur_vel = np.array(cur_vel, dtype=float)
+    cur_vel = np.linalg.norm(cur_vel)
     
     # 장애물이나 경로가 없는 경우
-    if len(obstacle_positions) == 0 or len(path_positions) == 0:
-        return True
+    if len(obstacle_positions) == 0 and cur_vel > 0.6 and reward_value < 0.4:
+        return False
     
     # 최소 거리 계산 (맨해튼 거리)
     min_distance = float('inf')
@@ -135,6 +143,12 @@ def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_val
     # 필터링 조건
     if min_distance <= 2 and reward_value < 0.6:
         # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
+        return False
+    
+    if 5 < min_distance <= 10 and reward_value > 0.8:
+        return False
+    
+    if min_distance > 15 and cur_vel > 0.6 and reward_value < 0.5:
         return False
     
     # 정상적인 보상
@@ -341,7 +355,7 @@ class TrajectoryDataset(Dataset):
                 drone_info_observation = np.array(drone_info_observation)
 
                 # filter_abnormal_rewards via obs and path
-                filter_obs_path = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, reward_value)
+                filter_obs_path = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, [v_x, v_y], reward_value)
                 filter_velocity = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
                                                                        vx, vy, reward_value)
 
@@ -588,7 +602,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
 
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8, load_data=True)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8, load_data=False)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
