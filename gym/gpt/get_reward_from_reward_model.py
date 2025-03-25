@@ -13,6 +13,7 @@ from tqdm import tqdm
 import sys
 import math
 import time
+from tqdm import tqdm
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_PATH)
@@ -211,7 +212,8 @@ class RewardModelDataset():
 
         print(f"trajectories 길이: {len(trajectories)}")
 
-        for i in range(len(trajectories)):
+        # for i in range(len(trajectories)):
+        for i in tqdm(range(len(trajectories)), desc="에피소드 처리 중"):
             episode = copy.deepcopy(trajectories[i])
             trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
 
