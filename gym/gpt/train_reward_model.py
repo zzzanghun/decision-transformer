@@ -379,7 +379,7 @@ class TrajectoryDataset(Dataset):
         }
 
 
-def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8):
+def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False):
     """
     데이터로더를 생성하여 반환합니다.
     
@@ -397,7 +397,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8):
     tuple
         (train_dataloader, val_dataloader)
     """
-    dataset = TrajectoryDataset(load_data=True)
+    dataset = TrajectoryDataset(load_data=load_data)
     
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
@@ -588,7 +588,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
 
 if __name__ == '__main__':
     # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=32, train_ratio=0.8, load_data=True)
     
     # 오토인코더 모델 로드
     obstacle_encoder = CostmapConvAutoencoder()
