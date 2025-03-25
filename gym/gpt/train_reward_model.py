@@ -525,47 +525,40 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         train_losses.append(train_loss)
         
         # 검증 모드
-        if epoch % 10 == 0:
-            model.eval()
-            val_loss = 0.0
+        model.eval()
+        val_loss = 0.0
+    
+        with torch.no_grad():
+            for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
+                drone_info = batch['drone_info'].to(device)
+                obs = batch['obs'].to(device)
+                path = batch['path'].to(device)
+                target_reward = batch['reward'].to(device).unsqueeze(1)  # (B, 1)
+                
+                # 순전파
+                predicted_reward = model(drone_info, obs, path)
+                
+                # 손실 계산
+                loss = criterion(predicted_reward, target_reward)
+                
+                val_loss += loss.item() * drone_info.size(0)
         
-            with torch.no_grad():
-                for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
-                    drone_info = batch['drone_info'].to(device)
-                    obs = batch['obs'].to(device)
-                    path = batch['path'].to(device)
-                    target_reward = batch['reward'].to(device).unsqueeze(1)  # (B, 1)
-                    
-                    # 순전파
-                    predicted_reward = model(drone_info, obs, path)
-                    
-                    # 손실 계산
-                    loss = criterion(predicted_reward, target_reward)
-                    
-                    val_loss += loss.item() * drone_info.size(0)
-            
-            # 에폭 평균 검증 손실
-            val_loss /= len(val_loader.dataset)
-            val_losses.append(val_loss)
-            
-            # 학습률 스케줄러 업데이트
-            # scheduler.step(val_loss)
-
-            print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}")
-
-            wandb.log({
-                "val_loss": math.sqrt(val_loss),
-                "learning_rate": optimizer.param_groups[0]['lr']
-            })
+        # 에폭 평균 검증 손실
+        val_loss /= len(val_loader.dataset)
+        val_losses.append(val_loss)
         
-        # 로그 출력
-        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {math.sqrt(mse_loss):.6f}")
+        # 학습률 스케줄러 업데이트
+        # scheduler.step(val_loss)
+
+        print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}, Train Loss: {math.sqrt(mse_loss):.6f}")
         
         # wandb 로깅
         wandb.log({
             "epoch": epoch + 1,
             "train_loss": math.sqrt(mse_loss),
             "l1_reg": l1_reg.item(),
+            "val_loss": math.sqrt(val_loss),
+            "learning_rate": optimizer.param_groups[0]['lr']
         })
         
         # 최고 성능 모델 저장
