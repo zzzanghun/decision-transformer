@@ -220,7 +220,7 @@ class TrajectoryDataset(Dataset):
     """
     궤적 데이터를 처리하는 Dataset 클래스
     """
-    def __init__(self, dataset_path=None):
+    def __init__(self, dataset_path=None, load_data=False):
         """
         Parameters:
         -----------
@@ -235,7 +235,16 @@ class TrajectoryDataset(Dataset):
         self.path_data = []
         self.reward_data = []
         
-        self._load_data(dataset_path)
+        if load_data:
+            dataset_path = f"{PROJECT_PATH}/data/reward_model_train_data.pkl"
+            with open(dataset_path, 'rb') as f:
+                data = pickle.load(f)
+            self.drone_info_data = data["drone_info"]
+            self.obs_data = data["obs"]
+            self.path_data = data["path"]
+            self.reward_data = data["reward"]
+        else:
+            self._load_data(dataset_path)
     
     def _load_data(self, dataset_path):
         """
@@ -341,6 +350,12 @@ class TrajectoryDataset(Dataset):
                     self.obs_data.append(copy.deepcopy(obs_observation))
                     self.path_data.append(copy.deepcopy(path_observation))
                     self.reward_data.append(copy.deepcopy(reward_value))
+
+        data = {"drone_info": self.drone_info_data, "obs": self.obs_data, "path": self.path_data, "reward": self.reward_data}
+        save_path = f"{PROJECT_PATH}/data/reward_model_train_data.pkl"
+        with open(save_path, 'wb') as f:
+            pickle.dump(data, f)
+        print(f"필터링된 데이터가 {save_path}에 저장되었습니다.")
         
         print(f"데이터 로드 완료: {len(self.drone_info_data)} 샘플")
 
@@ -382,7 +397,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8):
     tuple
         (train_dataloader, val_dataloader)
     """
-    dataset = TrajectoryDataset()
+    dataset = TrajectoryDataset(load_data=True)
     
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
