@@ -579,7 +579,7 @@ if __name__ == '__main__':
     obstacle_encoder = CostmapConvAutoencoder()
     path_encoder = CostmapConvAutoencoder()
 
-    obstacle_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/model_900.pth"))
+    obstacle_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/autoencoder_with_runlength_1000.pth"))
     path_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/autoencoder_with_traj_400.pth"))
 
     # 보상 모델 생성
@@ -589,8 +589,8 @@ if __name__ == '__main__':
     print(f"드론 정보 차원: {drone_info_dim}")
     
     # reward_model = RewardModel(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.3)
-    # reward_model = RewardModelCombined(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.1)
-    reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
+    reward_model = RewardModelCombined(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128, dropout_rate=0.1)
+    # reward_model = RewardModelOverfitting(obstacle_encoder, path_encoder, drone_info_dim=drone_info_dim, latent_dim=128)
     
     # 모델 학습
     train_losses, val_losses = train_reward_model(
@@ -599,6 +599,6 @@ if __name__ == '__main__':
         val_dataloader, 
         epochs=1000000, 
         lr=1e-5,
-        use_l1_regularization=True,
+        use_l1_regularization=False,
         use_l2_regularization=True
     )
