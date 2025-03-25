@@ -133,7 +133,7 @@ def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_val
             min_distance = min(min_distance, dist)
     
     # 필터링 조건
-    if min_distance <= 3 and reward_value < 0.5:
+    if min_distance <= 2 and reward_value < 0.6:
         # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
         return False
     
