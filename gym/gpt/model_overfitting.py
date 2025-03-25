@@ -33,24 +33,19 @@ class RewardModelOverfitting(nn.Module):
             nn.Linear(128 + 128 + drone_info_dim, 512),
             nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.2),
+            nn.Dropout(0.5),
             
             nn.Linear(512, 256),
-            nn.BatchNorm1d(256),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.2),
             
             nn.Linear(256, 128),
-            nn.BatchNorm1d(128),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.2),
             
             nn.Linear(128, 64),
-            nn.BatchNorm1d(64),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.1),  # 마지막 레이어 전에는 더 낮은 드롭아웃 비율
             
-            nn.Linear(64, 1)
+            nn.Linear(64, 1),
+            nn.Sigmoid()
         )
 
         self.dropout = nn.Dropout(0.1)
