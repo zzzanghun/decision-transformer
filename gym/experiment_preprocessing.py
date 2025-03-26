@@ -280,7 +280,7 @@ def experiment(
     if model_type == 'dt':
         if env_name == 'ego-planner':
             auto_encoder = CostmapConvAutoencoder(latent_dim=128)
-            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/model_900.pth"))
+            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/model/model_900.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
