@@ -273,7 +273,6 @@ class RewardModelDataset():
                     iy = int(round(50 - (y - y0) * 10))
                     if 0 <= ix < 100 and 0 <= iy < 100:
                         path_observation[ix, iy] = 1.0
-                        obs_observation[ix, iy] = 2.0
 
                     # 0.1초 간격으로 속도 정보 저장
                     if abs((t * 10) % 1) < 1e-10:
