@@ -39,110 +39,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"사용 장치: {device}")
 
 
-def filter_abnormal_rewards_via_velocity(target_direction, current_velocity, 
-                                        predicted_x_velocity, predicted_y_velocity, 
-                                        reward_value, min_distance):
-    # 방향 벡터와 속도 벡터를 numpy 배열로 변환
-    target_direction = np.array(target_direction, dtype=float)
-    current_velocity = np.array(current_velocity, dtype=float)
-    
-    # 벡터 정규화
-    target_direction_norm = np.linalg.norm(target_direction)
-    current_velocity_norm = np.linalg.norm(current_velocity)
-    
-    # 코사인 유사도 계산 (0으로 나누기 방지)
-    if target_direction_norm > 0 and current_velocity_norm > 0:
-        cos_sim = np.dot(target_direction, current_velocity) / (target_direction_norm * current_velocity_norm)
-    else:
-        cos_sim = 0
-    
-    # 현재 속도 크기 계산
-    velocity_magnitude = np.linalg.norm(current_velocity)
-    
-    # 예측 속도 처리
-    if isinstance(predicted_x_velocity, (list, np.ndarray)) and isinstance(predicted_y_velocity, (list, np.ndarray)):
-        if len(predicted_x_velocity) > 0 and len(predicted_y_velocity) > 0:
-            # 예측 속도 벡터 생성
-            predicted_velocities = np.column_stack((predicted_x_velocity, predicted_y_velocity))
-            
-            # 예측 속도의 평균 크기 계산
-            predicted_velocity_magnitudes = np.linalg.norm(predicted_velocities, axis=1)
-            mean_velocity_magnitude = np.mean(predicted_velocity_magnitudes)
-            
-            # 예측 속도와 타겟 방향의 정렬 정도 계산
-            if target_direction_norm > 0:
-                # 각 예측 속도와 타겟 방향 사이의 코사인 유사도 계산
-                predicted_direction_alignments = []
-                for vel in predicted_velocities:
-                    vel_norm = np.linalg.norm(vel)
-                    if vel_norm > 0:
-                        alignment = np.dot(vel, target_direction) / (vel_norm * target_direction_norm)
-                        predicted_direction_alignments.append(alignment)
-
-    mean_alignment = np.mean(predicted_direction_alignments)
-    
-    # 1. 코사인 유사도 기반 필터링
-    if cos_sim > 0.97 and reward_value < 0.5:
-        return False
-    
-    # 2. 속도 크기 기반 필터링
-    if velocity_magnitude > 0.7 and reward_value < 0.5:
-        return False
-    
-    if mean_alignment > 0.96 and mean_velocity_magnitude > 0.55 and min_distance <= 3 and reward_value < 0.4:
-        return False
-    
-    if mean_alignment < 0.9 and reward_value > 0.7 and min_distance > 5:
-        return False
-    
-    return True
-
-def filter_abnormal_rewards_via_obs_and_path(obs_matrix, path_matrix, reward_value):
-    """
-    장애물 행렬과 경로 행렬, 그리고 보상 값을 기반으로 비정상적인 보상을 필터링합니다.
-    
-    Parameters:
-    -----------
-    obs_matrix : numpy.ndarray
-        100x100 크기의 장애물 행렬 (1은 장애물, 0은 빈 공간)
-    path_matrix : numpy.ndarray
-        100x100 크기의 경로 행렬 (1은 경로, 0은 빈 공간)
-    reward_value : float
-        GPT가 제공한 보상 값 (0~1 사이)
-        
-    Returns:
-    --------
-    bool
-        True: 정상적인 보상, False: 비정상적인 보상
-    float
-        장애물과 경로 사이의 최소 거리
-    """
-    # 장애물(1)과 경로(1) 위치 찾기
-    obstacle_positions = np.argwhere(obs_matrix == 1)
-    path_positions = np.argwhere(path_matrix == 1)
-    
-    # 장애물이나 경로가 없는 경우
-    if len(obstacle_positions) == 0 and (reward_value > 0.8 or reward_value < 0.2):
-        return True, 100
-    
-    # 최소 거리 계산 (맨해튼 거리)
-    min_distance = float('inf')
-    for obs_pos in obstacle_positions:
-        for path_pos in path_positions:
-            dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
-            min_distance = min(min_distance, dist)
-    
-    # 필터링 조건
-    if min_distance <= 2 and reward_value < 0.6:
-        # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
-        return False, min_distance
-    
-    if 5 < min_distance <= 10 and reward_value > 0.7:
-        return False, min_distance
-
-    return True, min_distance
-
-
 def convert_to_runlength(obs_observation):
     unique_values = [val for val in np.unique(obs_observation) if val != 0]
     runlength_data = []
@@ -237,6 +133,8 @@ class TrajectoryDataset(Dataset):
         self.path_data = []
         self.reward_data = []
 
+        self.filtered_reward_data = 0
+
         if load_data:
             dataset_path = f"{PROJECT_PATH}/data/reward_model_train_data.pkl"
             with open(dataset_path, 'rb') as f:
@@ -247,6 +145,109 @@ class TrajectoryDataset(Dataset):
             self.reward_data = data['reward']
         else:
             self._load_data(dataset_path)
+    
+    def filter_abnormal_rewards_via_velocity(self, target_direction, current_velocity, 
+                                            predicted_x_velocity, predicted_y_velocity, 
+                                            reward_value, min_distance):
+        # 방향 벡터와 속도 벡터를 numpy 배열로 변환
+        target_direction = np.array(target_direction, dtype=float)
+        current_velocity = np.array(current_velocity, dtype=float)
+        
+        # 벡터 정규화
+        target_direction_norm = np.linalg.norm(target_direction)
+        current_velocity_norm = np.linalg.norm(current_velocity)
+        
+        # 코사인 유사도 계산 (0으로 나누기 방지)
+        if target_direction_norm > 0 and current_velocity_norm > 0:
+            cos_sim = np.dot(target_direction, current_velocity) / (target_direction_norm * current_velocity_norm)
+        else:
+            cos_sim = 0
+        
+        # 현재 속도 크기 계산
+        velocity_magnitude = np.linalg.norm(current_velocity)
+        
+        # 예측 속도 처리
+        if isinstance(predicted_x_velocity, (list, np.ndarray)) and isinstance(predicted_y_velocity, (list, np.ndarray)):
+            if len(predicted_x_velocity) > 0 and len(predicted_y_velocity) > 0:
+                # 예측 속도 벡터 생성
+                predicted_velocities = np.column_stack((predicted_x_velocity, predicted_y_velocity))
+                
+                # 예측 속도의 평균 크기 계산
+                predicted_velocity_magnitudes = np.linalg.norm(predicted_velocities, axis=1)
+                mean_velocity_magnitude = np.mean(predicted_velocity_magnitudes)
+                
+                # 예측 속도와 타겟 방향의 정렬 정도 계산
+                if target_direction_norm > 0:
+                    # 각 예측 속도와 타겟 방향 사이의 코사인 유사도 계산
+                    predicted_direction_alignments = []
+                    for vel in predicted_velocities:
+                        vel_norm = np.linalg.norm(vel)
+                        if vel_norm > 0:
+                            alignment = np.dot(vel, target_direction) / (vel_norm * target_direction_norm)
+                            predicted_direction_alignments.append(alignment)
+
+        mean_alignment = np.mean(predicted_direction_alignments)
+        
+        # 1. 코사인 유사도 기반 필터링
+        if cos_sim > 0.996 and reward_value < 0.5:
+            return False
+        
+        # 2. 속도 크기 기반 필터링
+        if velocity_magnitude > 0.7 and reward_value < 0.5:
+            return False
+        
+        if mean_alignment > 0.96 and mean_velocity_magnitude > 0.55 and min_distance <= 3 and reward_value < 0.4:
+            return False
+        
+        if mean_alignment < 0.9 and reward_value > 0.7 and min_distance > 5:
+            return False
+        
+        return True
+
+    def filter_abnormal_rewards_via_obs_and_path(self, obs_matrix, path_matrix, reward_value):
+        """
+        장애물 행렬과 경로 행렬, 그리고 보상 값을 기반으로 비정상적인 보상을 필터링합니다.
+        
+        Parameters:
+        -----------
+        obs_matrix : numpy.ndarray
+            100x100 크기의 장애물 행렬 (1은 장애물, 0은 빈 공간)
+        path_matrix : numpy.ndarray
+            100x100 크기의 경로 행렬 (1은 경로, 0은 빈 공간)
+        reward_value : float
+            GPT가 제공한 보상 값 (0~1 사이)
+            
+        Returns:
+        --------
+        bool
+            True: 정상적인 보상, False: 비정상적인 보상
+        float
+            장애물과 경로 사이의 최소 거리
+        """
+        # 장애물(1)과 경로(1) 위치 찾기
+        obstacle_positions = np.argwhere(obs_matrix == 1)
+        path_positions = np.argwhere(path_matrix == 1)
+        
+        # 장애물이나 경로가 없는 경우
+        if len(obstacle_positions) == 0 and (reward_value > 0.8 or reward_value < 0.2):
+            return True, 100
+        
+        # 최소 거리 계산 (맨해튼 거리)
+        min_distance = float('inf')
+        for obs_pos in obstacle_positions:
+            for path_pos in path_positions:
+                dist = np.sqrt((obs_pos[0] - path_pos[0])**2 + (obs_pos[1] - path_pos[1])**2)
+                min_distance = min(min_distance, dist)
+        
+        # 필터링 조건
+        if min_distance <= 2 and reward_value < 0.6:
+            # 장애물과 경로가 매우 가까운데 낮은 보상을 준 경우 (비정상)
+            return False, min_distance
+        
+        if 5 < min_distance <= 10 and reward_value > 0.7:
+            return False, min_distance
+
+        return True, min_distance
     
     def _load_data(self, dataset_path):
         """
@@ -268,7 +269,9 @@ class TrajectoryDataset(Dataset):
 
         print(f"trajectories 길이: {len(trajectories)}")
 
-        for i in range(len(trajectories)):
+        filter_reward = 0
+
+        for i in tqdm(range(len(trajectories)), desc="에피소드 처리 중"):
             episode = copy.deepcopy(trajectories[i])
             episode['actions'] = episode['actions'][:, action_indices]
 
@@ -343,9 +346,12 @@ class TrajectoryDataset(Dataset):
                 drone_info_observation = np.array(drone_info_observation)
 
                 # filter_abnormal_rewards via obs and path
-                filter_obs_path, min_distance = filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, reward_value)
-                filter_velocity = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
+                filter_obs_path, min_distance = self.filter_abnormal_rewards_via_obs_and_path(obs_observation, path_observation, reward_value)
+                filter_velocity = self.filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
                                                                        vx, vy, reward_value, min_distance)
+                
+                if not filter_velocity:
+                    self.filtered_reward_data += 1
 
                 if filter_obs_path and filter_velocity:
                     self.drone_info_data.append(copy.deepcopy(drone_info_observation))
@@ -363,8 +369,16 @@ class TrajectoryDataset(Dataset):
         with open(f"{PROJECT_PATH}/data/reward_model_train_data.pkl", 'wb') as f:
             pickle.dump(data, f)
         
-        print(f"데이터 저장 및 로드 완료: {len(self.drone_info_data)} 샘플")
-
+        print(f"데이터 저장 및 로드 완료: {len(self.drone_info_data)} 샘플, 필터링 reward 횟수: {self.filtered_reward_data}")
+        # self.reward_1 = np.array(self.reward_1)
+        # self.reward_2 = np.array(self.reward_2)
+        # self.reward_3 = np.array(self.reward_3)
+        # self.reward_4 = np.array(self.reward_4)
+        # self.reward_5 = np.array(self.reward_5)
+        # self.reward_6 = np.array(self.reward_6)
+        
+        # print(f"reward_1 mean: {np.mean(self.reward_1)}, reward_2 mean: {np.mean(self.reward_2)}, reward_3 mean: {np.mean(self.reward_3)}, reward_4 mean: {np.mean(self.reward_4)}")
+        
     def __len__(self):
         return len(self.drone_info_data)
 

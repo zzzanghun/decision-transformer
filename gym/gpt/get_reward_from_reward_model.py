@@ -253,6 +253,7 @@ class RewardModelDataset():
 
                 obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
                 path_observation = np.zeros_like(obs_observation)
+                obs_path_observation = obs_observation.copy()
 
                 runlength_data = convert_to_runlength(obs_observation)
                 obs_observation = reconstruct_from_runlength(runlength_data)
@@ -273,7 +274,7 @@ class RewardModelDataset():
                     iy = int(round(50 - (y - y0) * 10))
                     if 0 <= ix < 100 and 0 <= iy < 100:
                         path_observation[ix, iy] = 1.0
-
+                        obs_path_observation[ix, iy] = 2.0
                     # 0.1초 간격으로 속도 정보 저장
                     if abs((t * 10) % 1) < 1e-10:
                         drone_info_observation.append(v_x_t)
@@ -296,7 +297,8 @@ class RewardModelDataset():
                 reward_value = reward_value[0][0].detach().cpu().numpy()
                 trajectories[i]['rewards'][j] = reward_value
 
-                # print(obs_observation)
+                # print(obs_path_observation)
+
                 filter_velocity = filter_abnormal_rewards_via_velocity([drone_info_observation[0], drone_info_observation[1]], [drone_info_observation[2], drone_info_observation[3]], 
                                                                        vx, vy, reward_value)
                 # print(reward_value)
