@@ -164,6 +164,10 @@ def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
             running_iou += iou.item()
             running_accuracy += accuracy.item()
 
+            # 메모리 명시적 정리 (각 배치 후)
+            if batch_idx % 5 == 0:
+                torch.cuda.empty_cache()
+
         epoch_loss = running_loss / num_batches
         epoch_iou = running_iou / num_batches
         epoch_accuracy = running_accuracy / num_batches
