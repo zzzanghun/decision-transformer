@@ -1,142 +1,116 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torch.utils.data import DataLoader
 from data import CostmapDataset
-from model import CostmapConvAutoencoder
-from torch.utils.data import DataLoader, Dataset
+from model import SparseVoxelAutoencoder
 import wandb
 import os
-import numpy as np
+import MinkowskiEngine as ME
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-print(PROJECT_PATH)
 
-class RandomCostmapDataset(Dataset):
-    """
-    0, 0.5, 1 값을 무작위로 배치한 코스트맵 데이터셋
-    """
-    def __init__(self, size=100, num_samples=50000):
-        """
-        size: 코스트맵의 크기 (size x size)
-        num_samples: 데이터셋의 샘플 수
-        """
-        self.size = size
-        self.num_samples = num_samples
-        self.data = self._generate_random_data()
-        
-    def _generate_random_data(self):
-        # 0, 0.5, 1 값을 가진 랜덤 데이터 생성
-        data = []
-        for _ in range(self.num_samples):
-            # 먼저 모든 값을 0으로 초기화
-            costmap = np.zeros((1, self.size, self.size), dtype=np.float32)
-            
-            # 0.5 값을 가질 픽셀 수 (전체 픽셀의 10%)
-            num_half_pixels = int(0.1 * self.size * self.size)
-            # 1 값을 가질 픽셀 수 (전체 픽셀의 5%)
-            num_one_pixels = int(0.2 * self.size * self.size)
-            
-            # 0.5 값 랜덤 배치
-            half_indices = np.random.choice(self.size * self.size, num_half_pixels, replace=False)
-            for idx in half_indices:
-                row, col = idx // self.size, idx % self.size
-                costmap[0, row, col] = 0.5
-            
-            # 1 값 랜덤 배치
-            one_indices = np.random.choice(self.size * self.size, num_one_pixels, replace=False)
-            for idx in one_indices:
-                row, col = idx // self.size, idx % self.size
-                costmap[0, row, col] = 1.0
-                
-            data.append(torch.tensor(costmap, dtype=torch.float32))
-            
-        return data
-    
-    def __len__(self):
-        return self.num_samples
-    
-    def __getitem__(self, idx):
-        return self.data[idx]
+def minkowski_collate_fn(batch):
+    coordinates, features = [], []
+    for i, item in enumerate(batch):
+        coords = item['coordinates']
+        coords[:, 0] = i  # batch index 설정
+        coordinates.append(coords)
+        features.append(item['features'])
 
-def weighted_mse_loss(output, target):
-    # output, target shape = (batch, 1, H, W)
-    weight = torch.ones_like(target)
-    weight[target == 0.5] = 10.0  # 0.5인 지점의 손실 가중치 크게
-    return (weight * (output - target)**2).mean()
+    coordinates = torch.cat(coordinates, dim=0)
+    features = torch.cat(features, dim=0)
+    return coordinates, features
+
+def sparse_mse_loss(output_sparse_tensor, target_sparse_tensor):
+    return torch.nn.functional.mse_loss(output_sparse_tensor.F, target_sparse_tensor.F)
+
+def reconstruction_accuracy(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
+    # 출력과 타겟의 좌표 가져오기
+    out_coords = output_sparse_tensor.C.cpu().numpy()
+    target_coords = target_sparse_tensor.C.cpu().numpy()
     
-def train_autoencoder(model, dataloader, epochs=10, lr=1e-3):
-    """
-    오토인코더 학습 루틴 예시.
-    - dataloader: CostmapDataset 등에 대한 DataLoader
-    - epochs: 학습 epoch 수
-    - lr: 학습률
-    """
+    # 좌표 일치 여부 확인 (좌표 매니저가 동일하다면 좌표 순서도 동일해야 함)
+    if not torch.equal(output_sparse_tensor.C, target_sparse_tensor.C):
+        print("경고: 출력과 타겟 텐서의 좌표가 일치하지 않습니다.")
+    
+    # 이진화 변환
+    output_binary = (output_sparse_tensor.F > threshold).float()
+    target_binary = (target_sparse_tensor.F > threshold).float()
+
+    true_positives = ((output_binary == 1) & (target_binary == 1)).float().sum()
+    total_actual_positives = (target_binary == 1).float().sum()
+
+    recall = true_positives / total_actual_positives
+    
+    return recall
+
+def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    
-    # binary map이라면 BCEWithLogitsLoss나 BCELoss 고려
-    criterion = nn.MSELoss()
+
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    
+
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
-        
-        for data in dataloader:
-            # data shape: [batch_size, 1, 100, 100]
-            data = data.to(device)
-            
-            optimizer.zero_grad()
-            
-            # Forward
-            outputs = model(data)
-            
-            # Loss 계산
-            # loss = criterion(outputs, data)
-            loss = weighted_mse_loss(outputs, data)
+        running_accuracy = 0.0
 
-            # Backprop
+        for coordinates, features in dataloader:
+            coordinates = coordinates.to(device)
+            features = features.to(device)
+
+            optimizer.zero_grad()
+
+            output_sparse, latent = model(coordinates, features)
+
+            target_sparse = ME.SparseTensor(features, coordinates, 
+                                            coordinate_manager=output_sparse.coordinate_manager)
+
+            loss = sparse_mse_loss(output_sparse, target_sparse)
+            accuracy = reconstruction_accuracy(output_sparse, target_sparse)
+
             loss.backward()
             optimizer.step()
-            
-            running_loss += loss.item() * data.size(0)
-        
-        epoch_loss = running_loss / len(dataloader.dataset)
-        print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}")
 
+            running_loss += loss.item()
+            running_accuracy += accuracy.item()
+
+        epoch_loss = running_loss / len(dataloader)
+        recall = running_accuracy / len(dataloader)
+        
+        print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}, Recon Recall: {recall:.4f}")
+
+        # wandb 로깅 추가
         wandb.log({
-            "loss": epoch_loss
+            "loss": epoch_loss,
+            "reconstruction_recall": recall
         })
 
-        if epoch % 100 == 0:
-            folder_name = f"{PROJECT_PATH}/model/auto_encoder"
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
-            torch.save(model.state_dict(), f"{PROJECT_PATH}/model/auto_encoder/autoencoder_with_runlength_{epoch}.pth")
-
+        if (epoch + 1) % 100 == 0:
+            folder_name = f"{PROJECT_PATH}/model/3d_auto_encoder"
+            os.makedirs(folder_name, exist_ok=True)
+            torch.save(model.state_dict(),
+                       f"{folder_name}/3d_autoencoder_{epoch+1}.pth")
 
 if __name__ == "__main__":
-    # 1) 데이터셋 및 데이터로더 준비
-    dataset = CostmapDataset(add_random_lines=False)  # 임의 생성 예시
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+    wandb.init(project='3d-auto-encoder')
 
-    # 2) 모델 생성
-    model = CostmapConvAutoencoder(latent_dim=128)
-    model.load_state_dict(torch.load(f"{PROJECT_PATH}/model/model_900.pth"))
-    
-    wandb.init(
-            project='auto-encoder'
-        )
+    dataset = CostmapDataset()
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True,
+                            collate_fn=minkowski_collate_fn)
 
-    # 3) 학습
-    train_autoencoder(model, dataloader, epochs=1000000, lr=1e-4)
-    
-    # 4) 추론(테스트) 예시
-    # 실제 테스트 시에는 별도의 검증 세트를 사용해야 함
-    sample_data = next(iter(dataloader))
+    model = SparseVoxelAutoencoder(latent_dim=128)
+
+    train_autoencoder(model, dataloader, epochs=10000, lr=1e-4)
+
+    # 간단한 추론 예시
+    coordinates, features = next(iter(dataloader))
+    coordinates = coordinates.to(next(model.parameters()).device)
+    features = features.to(next(model.parameters()).device)
+
     with torch.no_grad():
-        sample_data = sample_data.to(next(model.parameters()).device)
-        reconstructed = model(sample_data)
-    
-    print("Input shape:", sample_data.shape)        # [batch, 1, 100, 100]
-    print("Output shape:", reconstructed.shape)     # [batch, 1, 100, 100]
+        reconstructed, _ = model(coordinates, features)
+
+    print("Input Sparse shape:", features.shape)
+    print("Output Sparse shape:", reconstructed.F.shape)
