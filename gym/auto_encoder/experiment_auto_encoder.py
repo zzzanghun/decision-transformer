@@ -10,6 +10,42 @@ import MinkowskiEngine as ME
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
+def sparse_tensor_to_dense_voxel(sparse_tensor, voxel_shape=(10, 50, 50), threshold=0.5):
+    """
+    Minkowski SparseTensor를 dense voxel map으로 변환합니다.
+    (batch_size, 10, 50, 50) 크기의 dense tensor 반환
+    """
+    batch_size = sparse_tensor.C[:, 0].max().item() + 1
+    dense_voxels = torch.zeros((batch_size, *voxel_shape), dtype=torch.float32, device=sparse_tensor.F.device)
+
+    coords = sparse_tensor.C.long()
+    feats = sparse_tensor.F
+
+    for i in range(coords.shape[0]):
+        b, z, y, x = coords[i]
+        dense_voxels[b, z, y, x] = feats[i]
+
+    # 이진화(0, 1) voxel로 변환
+    dense_voxels_binary = (dense_voxels > threshold).float()
+
+    return dense_voxels_binary
+
+def voxel_accuracy(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (10, 50, 50), threshold=0.5)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (10, 50, 50), threshold=0.5)
+
+    return (output_dense_voxels == target_dense_voxels).float().sum() / target_dense_voxels.numel()
+
+def voxel_recall(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (10, 50, 50), threshold=0.5)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (10, 50, 50), threshold=0.5)
+    true_positives = ((output_dense_voxels == 1) & (target_dense_voxels == 1)).float().sum()
+    total_actual_positives = (target_dense_voxels == 1).float().sum()
+
+    recall = true_positives / total_actual_positives
+
+    return recall
+
 def minkowski_collate_fn(batch):
     coordinates, features = [], []
     for i, item in enumerate(batch):
@@ -25,7 +61,7 @@ def minkowski_collate_fn(batch):
 def sparse_mse_loss(output_sparse_tensor, target_sparse_tensor):
     return torch.nn.functional.mse_loss(output_sparse_tensor.F, target_sparse_tensor.F)
 
-def reconstruction_accuracy(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
+def reconstruction_accuracy_iou(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
     # 출력과 타겟의 좌표 가져오기
     out_coords = output_sparse_tensor.C.cpu().numpy()
     target_coords = target_sparse_tensor.C.cpu().numpy()
@@ -38,12 +74,20 @@ def reconstruction_accuracy(output_sparse_tensor, target_sparse_tensor, threshol
     output_binary = (output_sparse_tensor.F > threshold).float()
     target_binary = (target_sparse_tensor.F > threshold).float()
 
-    true_positives = ((output_binary == 1) & (target_binary == 1)).float().sum()
-    total_actual_positives = (target_binary == 1).float().sum()
-
-    recall = true_positives / total_actual_positives
+    # IoU 계산을 위한 요소들
+    intersection = ((output_binary == 1) & (target_binary == 1)).float().sum()
+    union = ((output_binary == 1) | (target_binary == 1)).float().sum()
     
-    return recall
+    # 분모가 0이 되는 경우 방지
+    if union == 0:
+        return torch.tensor(0.0, device=output_binary.device)
+    
+    iou = intersection / union
+
+    # accuracy 계산
+    accuracy = intersection / target_binary.numel()
+    
+    return iou, accuracy
 
 def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -54,6 +98,7 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
+        running_iou = 0.0
         running_accuracy = 0.0
 
         for coordinates, features in dataloader:
@@ -68,23 +113,24 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
                                             coordinate_manager=output_sparse.coordinate_manager)
 
             loss = sparse_mse_loss(output_sparse, target_sparse)
-            accuracy = reconstruction_accuracy(output_sparse, target_sparse)
+            iou, accuracy = reconstruction_accuracy_iou(output_sparse, target_sparse)
 
             loss.backward()
             optimizer.step()
 
             running_loss += loss.item()
+            running_iou += iou.item()
             running_accuracy += accuracy.item()
 
         epoch_loss = running_loss / len(dataloader)
-        recall = running_accuracy / len(dataloader)
-        
-        print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}, Recon Recall: {recall:.4f}")
+        epoch_iou = running_iou / len(dataloader)
+        epoch_accuracy = running_accuracy / len(dataloader)
 
-        # wandb 로깅 추가
+        print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}, Recon IoU: {epoch_iou:.4f}, Recon Accuracy: {epoch_accuracy:.4f}")
         wandb.log({
             "loss": epoch_loss,
-            "reconstruction_recall": recall
+            "reconstruction_iou": epoch_iou,
+            "reconstruction_accuracy": epoch_accuracy
         })
 
         if (epoch + 1) % 100 == 0:
