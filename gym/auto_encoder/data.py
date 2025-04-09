@@ -24,6 +24,8 @@ class CostmapDataset(Dataset):
         for traj in trajectories:
             for obs in traj['observations']:
                 voxel_map = obs[:, :10*50*50].reshape(10, 50, 50)
+                if np.sum(voxel_map) == 0:
+                    continue
                 self.data.append(voxel_map.copy())
 
     def __len__(self):
