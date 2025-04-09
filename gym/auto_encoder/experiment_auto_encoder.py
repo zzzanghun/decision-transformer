@@ -129,7 +129,7 @@ def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
         
         # 배치 단위로 처리
         num_batches = (len(dataset) + batch_size - 1) // batch_size  # 올림 나눗셈
-        
+
         for batch_idx in range(num_batches):
             # 현재 배치의 인덱스 선택
             start_idx = batch_idx * batch_size
@@ -163,10 +163,6 @@ def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
             running_loss += loss.item()
             running_iou += iou.item()
             running_accuracy += accuracy.item()
-
-            # 메모리 명시적 정리 (각 배치 후)
-            if batch_idx % 5 == 0:
-                torch.cuda.empty_cache()
 
         epoch_loss = running_loss / num_batches
         epoch_iou = running_iou / num_batches
