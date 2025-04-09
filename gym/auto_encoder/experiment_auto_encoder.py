@@ -7,6 +7,7 @@ from model import SparseVoxelAutoencoder
 import wandb
 import os
 import MinkowskiEngine as ME
+import random
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -89,19 +90,60 @@ def reconstruction_accuracy_iou(output_sparse_tensor, target_sparse_tensor, thre
     
     return iou, accuracy
 
-def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
+def create_batch_manually(dataset, batch_size, indices):
+    """데이터셋에서 지정된 인덱스에 해당하는 샘플들로 배치를 수동으로 생성합니다."""
+    coordinates_list, features_list = [], []
+    
+    for i, idx in enumerate(indices):
+        item = dataset[idx]
+        coords = item['coordinates']
+        coords[:, 0] = i  # batch index 설정
+        coordinates_list.append(coords)
+        features_list.append(item['features'])
+    
+    # 각 리스트의 텐서를 하나로 합침
+    if coordinates_list:  # 리스트가 비어있지 않은 경우
+        coordinates = torch.cat(coordinates_list, dim=0)
+        features = torch.cat(features_list, dim=0)
+        return coordinates, features
+    else:
+        return None, None
+
+def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
+
+    # 전체 데이터셋 인덱스 목록
+    all_indices = list(range(len(dataset)))
 
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
         running_iou = 0.0
         running_accuracy = 0.0
+        
+        # 에폭마다 데이터셋 섞기
+        random.shuffle(all_indices)
+        
+        # 배치 단위로 처리
+        num_batches = (len(dataset) + batch_size - 1) // batch_size  # 올림 나눗셈
+        
+        for batch_idx in range(num_batches):
+            # 현재 배치의 인덱스 선택
+            start_idx = batch_idx * batch_size
+            end_idx = min((batch_idx + 1) * batch_size, len(dataset))
+            batch_indices = all_indices[start_idx:end_idx]
 
-        for coordinates, features in dataloader:
+            # print(f"batch size: {end_idx - start_idx}")
+            
+            # 배치 데이터 생성
+            coordinates, features = create_batch_manually(dataset, batch_size, batch_indices)
+            
+            if coordinates is None:  # 빈 배치 처리
+                continue
+                
             coordinates = coordinates.to(device)
             features = features.to(device)
 
@@ -122,9 +164,9 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
             running_iou += iou.item()
             running_accuracy += accuracy.item()
 
-        epoch_loss = running_loss / len(dataloader)
-        epoch_iou = running_iou / len(dataloader)
-        epoch_accuracy = running_accuracy / len(dataloader)
+        epoch_loss = running_loss / num_batches
+        epoch_iou = running_iou / num_batches
+        epoch_accuracy = running_accuracy / num_batches
 
         print(f"Epoch [{epoch+1}/{epochs}], Loss: {epoch_loss:.4f}, Recon IoU: {epoch_iou:.4f}, Recon Accuracy: {epoch_accuracy:.4f}")
         wandb.log({
@@ -132,6 +174,17 @@ def train_autoencoder(model, dataloader, epochs=10, lr=1e-4):
             "reconstruction_iou": epoch_iou,
             "reconstruction_accuracy": epoch_accuracy
         })
+
+        if epoch % 10 == 0:
+            voxel_accuracy_value = voxel_accuracy(output_sparse, target_sparse)
+            voxel_recall_value = voxel_recall(output_sparse, target_sparse)
+
+            print(f"Voxel Accuracy: {voxel_accuracy_value:.4f}, Voxel Recall: {voxel_recall_value:.4f}")
+
+            wandb.log({
+                "voxel_accuracy": voxel_accuracy_value,
+                "voxel_recall": voxel_recall_value
+            })
 
         if (epoch + 1) % 100 == 0:
             folder_name = f"{PROJECT_PATH}/model/3d_auto_encoder"
@@ -143,15 +196,20 @@ if __name__ == "__main__":
     wandb.init(project='3d-auto-encoder')
 
     dataset = CostmapDataset()
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True,
-                            collate_fn=minkowski_collate_fn)
-
     model = SparseVoxelAutoencoder(latent_dim=128)
 
-    train_autoencoder(model, dataloader, epochs=10000, lr=1e-4)
+    # DataLoader 없이 직접 데이터셋에서 배치를 생성하여 학습
+    train_autoencoder(model, dataset, epochs=10000, batch_size=64, lr=1e-4)
 
-    # 간단한 추론 예시
-    coordinates, features = next(iter(dataloader))
+    # 간단한 추론 예시 - 랜덤 샘플 하나만 테스트
+    test_idx = random.randint(0, len(dataset) - 1)
+    test_item = dataset[test_idx]
+    
+    # 단일 샘플을 배치처럼 만들기
+    coordinates = test_item['coordinates'].clone()
+    coordinates[:, 0] = 0  # 배치 인덱스 0으로 설정
+    features = test_item['features']
+    
     coordinates = coordinates.to(next(model.parameters()).device)
     features = features.to(next(model.parameters()).device)
 
