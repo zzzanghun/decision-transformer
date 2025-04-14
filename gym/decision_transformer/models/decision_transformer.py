@@ -7,7 +7,7 @@ import transformers
 from decision_transformer.models.model import TrajectoryModel
 from decision_transformer.models.trajectory_gpt2 import GPT2Model
 
-
+import MinkowskiEngine as ME
 class DecisionTransformer(TrajectoryModel):
 
     """
@@ -52,36 +52,23 @@ class DecisionTransformer(TrajectoryModel):
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
             if extended_cnn:
-                # self.embed_state = nn.Sequential(
-                #     # First convolution: smaller stride to retain details
-                #     nn.Conv2d(1, 16, kernel_size=3, stride=2, padding=1, bias=True),
-                #     nn.ReLU(),
+                self.encoder = nn.Sequential(
+                    ME.MinkowskiConvolution(1, 32, kernel_size=3, stride=1, dimension=3),
+                    ME.MinkowskiBatchNorm(32),
+                    ME.MinkowskiReLU(inplace=True),
 
-                #     # Second convolution
-                #     nn.Conv2d(16, 16, kernel_size=3, stride=2, padding=1, groups=16, bias=True),
-                #     nn.ReLU(),
-                #     nn.Conv2d(16, 32, kernel_size=1, stride=1, padding=0, bias=True),
-                #     nn.ReLU(),
+                    ME.MinkowskiConvolution(32, 64, kernel_size=3, stride=2, dimension=3),
+                    ME.MinkowskiBatchNorm(64),
+                    ME.MinkowskiReLU(inplace=True),
 
-                #     # Extra convolution for more capacity
-                #     nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, groups=32, bias=True),
-                #     nn.ReLU(),
-                #     nn.Conv2d(32, 128, kernel_size=1, stride=1, padding=0, bias=True),
-                #     nn.ReLU(),
-
-                #     nn.AdaptiveAvgPool2d(output_size=(1, 1)),
-                #     nn.Flatten(),
-
-                #     nn.Linear(in_features=128, out_features=self.before_concat_hidden_size)
-                # )
-                self.embed_state = nn.Sequential(
-                    auto_encoder.encoder,
-                    nn.Flatten(start_dim=1),
-                    auto_encoder.fc_enc
+                    ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=3),
+                    ME.MinkowskiBatchNorm(128),
+                    ME.MinkowskiReLU(inplace=True)
                 )
-                # auto encoder를 freeze
-                for param in self.embed_state.parameters():
-                    param.requires_grad = False
+                # Global pooling 추가
+                self.global_pool = ME.MinkowskiGlobalAvgPooling()
+                # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
+                self.fc_enc = nn.Linear(128, 128)
             else:
                 self.embed_state = nn.Sequential(
                     nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),

@@ -16,7 +16,7 @@ from decision_transformer.models.decision_transformer import DecisionTransformer
 from decision_transformer.models.mlp_bc import MLPBCModel
 from decision_transformer.training.act_trainer import ActTrainer
 from decision_transformer.training.seq_trainer import SequenceTrainer
-from auto_encoder.model import CostmapConvAutoencoder   
+from auto_encoder.model import SparseVoxelAutoencoder   
 
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
@@ -33,6 +33,90 @@ def discount_cumsum(x, gamma):
         discount_cumsum[t] = x[t] + gamma * discount_cumsum[t+1]
     return discount_cumsum
 
+def preprocessing_obs_for_minkowski(voxel_map):
+    voxel_map = voxel_map.reshape(10, 50, 50)
+
+    coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
+    feats = voxel_map[voxel_map > 0].reshape(-1, 1).astype(np.float32)
+
+    batch_idx = np.zeros((coords.shape[0], 1), dtype=np.int32)
+    coords = np.hstack((batch_idx, coords)).astype(np.int32)
+
+    return torch.tensor(coords, dtype=torch.int32), torch.tensor(feats, dtype=torch.float32)
+
+def calculate_distance_from_center_using_coords(coords, center_coord=(5, 25, 25), reward_radius=20):
+    """
+    MinkowskiEngine용으로 변환된 희소 좌표를 사용하여 중심에서 가장 가까운 장애물까지의 거리 계산
+    
+    Args:
+        coords: [N, 4] 형태의 torch.Tensor 또는 numpy 배열 ([batch_idx, z, y, x] 형식)
+        center_coord: 중심 좌표 (z, y, x)
+        reward_radius: 최대 거리 (마스크 내에 장애물이 없는 경우 사용)
+    
+    Returns:
+        min_distance: 중심에서 가장 가까운 장애물까지의 거리
+        reward: 정규화된 보상값
+    """
+    # coords가 torch.Tensor인 경우 numpy로 변환
+    if isinstance(coords, torch.Tensor):
+        coords = coords.cpu().numpy()
+    
+    # coords가 비어있는 경우 (장애물이 없는 경우)
+    if coords.shape[0] == 0:
+        return reward_radius, 1.0
+        
+    # 실제 좌표는 coords[:, 1:4]에 있음 (batch_idx 제외)
+    z_center, y_center, x_center = center_coord
+    
+    # 각 장애물 좌표에서 중심까지의 유클리드 거리 계산
+    distances = np.sqrt(
+        (coords[:, 0] - z_center)**2 + 
+        (coords[:, 1] - y_center)**2 + 
+        (coords[:, 2] - x_center)**2
+    )
+    
+    # reward_radius 이내의 장애물만 고려
+    distances_within_radius = distances[distances <= reward_radius]
+    
+    if distances_within_radius.size > 0:
+        # 반경 내 가장 가까운 장애물과의 거리
+        min_distance = np.min(distances_within_radius)
+    else:
+        # 반경 내에 장애물이 없는 경우
+        min_distance = reward_radius
+    
+    # 정규화된 보상 계산 (거리가 멀수록 보상이 큼)
+    reward = min_distance / reward_radius
+    
+    return min_distance, reward
+
+def convert_observations_to_dict_format(trajectories):
+    """NumPy 배열 형태의 observations를 Python 딕셔너리 리스트로 변환"""
+    for traj in trajectories:
+        new_observations = []
+        for j in range(len(traj['observations'])):
+            # 복셀 데이터와 오돔 데이터 분리
+            voxel_data = traj['observations'][j][:, :10*50*50]
+            odom_data = traj['observations'][j][:, 10*50*50:]
+            
+            # 복셀 데이터를 MinkowskiEngine 형식으로 변환
+            voxel_reshaped = voxel_data.reshape(10, 50, 50)
+            coords, feats = preprocessing_obs_for_minkowski(voxel_reshaped)
+            
+            # 새 관측값 형식: 딕셔너리
+            new_obs = {
+                'voxel': {
+                    'coords': coords,
+                    'feats': feats
+                },
+                'odom': odom_data
+            }
+            new_observations.append(new_obs)
+        
+        # 기존 observations를 새 형식으로 대체
+        traj['observations'] = new_observations
+    
+    return trajectories
 
 def experiment(
         exp_prefix,
@@ -86,37 +170,10 @@ def experiment(
 
     # load dataset
     if env_name == 'ego-planner':
-        obstacle_dim = (1, 100, 100)
         odom_dim = 8
         act_dim = 6
         reward_radius = 20
-        del_list = []
-        # for i in range(1, 102):
-        #     dataset_path = f'{PROJECT_PATH}/data/ego/grid_4/ego-planner-data_{i}.pkl'
-        #     if i == 1:
-        #         with open(dataset_path, 'rb') as f:
-        #             trajectories = pickle.load(f)
-        #     else:
-        #         with open(dataset_path, 'rb') as f:
-        #             trajectories += pickle.load(f)
-        # for i in range(1, 102):
-        #     dataset_path = f'{PROJECT_PATH}/data/ego/grid_5/ego-planner-data_{i}.pkl'
-        #     with open(dataset_path, 'rb') as f:
-        #         trajectories += pickle.load(f)
-        # for i in range(1, 30):
-        #     dataset_path = f'{PROJECT_PATH}/gym/data/medial/grid_4/ego-planner-data_{i}.pkl'
-        #     if i == 1:
-        #         with open(dataset_path, 'rb') as f:
-        #             trajectories = pickle.load(f)
-        #     else:
-        #         with open(dataset_path, 'rb') as f:
-        #             trajectories += pickle.load(f)
-        #     # with open(dataset_path, 'rb') as f:
-        #     #     trajectories += pickle.load(f)
-        # for i in range(1, 30):
-        #     dataset_path = f'{PROJECT_PATH}/gym/data/medial/grid_5/ego-planner-data_{i}.pkl'
-        #     with open(dataset_path, 'rb') as f:
-        #         trajectories += pickle.load(f)
+        obstacle_dim = (10, 50, 50)
         for i in range(1, 30):
             dataset_path = f'{PROJECT_PATH}/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
             if i == 1:
@@ -133,77 +190,52 @@ def experiment(
                 trajectories += pickle.load(f)
 
         # Define the indices of the actions to be used
-        action_indices = [0, 1, 2, 6, 7, 8]
-        obs_indices = [0, 1, 3, 4, 6, 7, 9, 10]
+        action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
         sampled_traj = []
+        save_traj = False
+        del_traj = False
         
         for i in range(len(trajectories)):
             trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
-            obs_first_part = trajectories[i]['observations'][:, :, :100*100]
-            obs_second_part = trajectories[i]['observations'][:, :, 100*100:]
-            obs_second_part = obs_second_part[:, :, obs_indices]
-            trajectories[i]['observations'] = np.concatenate([obs_first_part, obs_second_part], axis=2)
             trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
-            save_traj = False
-            del_traj = False
+            trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'])
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
                 coef = np.round(coef / 0.001) * 0.001
                 # Assign back
                 trajectories[i]['actions'][j] = coef
-                a5, a4, a3, b5, b4, b3 = coef
-                drone_info = trajectories[i]['observations'][j][:, 100*100:]
-                v_x = drone_info[0][2]         # 현재 x축 속도
-                v_y = drone_info[0][3]         # 현재 y축 속도
-                a_x = drone_info[0][6]         # 현재 x축 가속도
-                a_y = drone_info[0][7]         # 현재 y축 가속도
+                
+                # 새 형식으로 접근
+                odom_data = trajectories[i]['observations'][j]['odom']
+                coords = trajectories[i]['observations'][j]['voxel']['coords']
+                feats = trajectories[i]['observations'][j]['voxel']['feats']
+                
                 if np.any(np.abs(coef) > 0.1):
-                    # print(f"x_coef in trajectory {i} has values exceeding |{1}|: {coef[np.abs(coef) > 1]}")
-                    # del_list.append(i)
                     save_traj = True
                 if np.any(np.abs(coef) > 2.0):
                     print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 2]}")
                     del_traj = True
-                direction_vector = trajectories[i]['observations'][j][:, 100*100:100*100 + 2]
+                
+                direction_vector = odom_data[:, :3]
                 norm = np.linalg.norm(direction_vector)
                 if norm != 0:
                     direction_vector = direction_vector / norm
-                trajectories[i]['observations'][j][:, 100*100:100*100 + 2] = direction_vector
-                print(trajectories[i]['observations'][j][:, 100*100:])
-                obs_observation = trajectories[i]['observations'][j][:, :100*100].reshape(100, 100)
-                x0, y0 = 5, 5
-                t_values = np.arange(0, 2.0 + 0.01, 0.01)
-                for t in t_values:
-                    x = x0 + v_x * t + 0.5 * a_x * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
-                    y = y0 + v_y * t + 0.5 * a_y * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
-                    
-                    # grid map의 인덱스로 변환 (여기서는 반올림하여 정수 인덱스로 변환)
-                    ix = int(round(50 - (x - x0) * 10))
-                    iy = int(round(50 - (y - y0) * 10))
-                    
-                    # grid map의 범위 내에 있는 경우에만 값을 2로 지정
-                    if 0 <= ix < 100 and 0 <= iy < 100:
-                        obs_observation[ix, iy] = 2  # 일반적으로 행이 y축, 열이 x축을 나타냄
-
-                print(obs_observation)
-                x, y = np.ogrid[:100, :100]
-                distance_squared = (x - 50)**2 + (y - 50)**2
-                mask = distance_squared <= reward_radius**2
-                # reward = np.sum(obs_observation[mask]) / 1000
-                masked_indices = np.argwhere((obs_observation == 1) & (mask))
-                if masked_indices.size > 0:
-                    distances_to_center = np.sqrt((masked_indices[:, 0] - 50)**2 + (masked_indices[:, 1] - 50)**2)
-                    min_distance = np.min(distances_to_center)
-                else:
-                    min_distance = reward_radius
-                reward = min_distance / reward_radius
-                # obs_observation[50,50] = 999
-                # print(obs_observation)
-                # print(f"Minimum distance to (50, 50): {min_distance}")
+                
+                trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
+                
+                if feats.shape[0] == 0:
+                    del_traj = True
+                
+                # coords를 활용해서 중앙에서 장애물과의 거리 계산
+                min_distance, reward = calculate_distance_from_center_using_coords(
+                    coords, 
+                    center_coord=(5, 25, 25), 
+                    reward_radius=reward_radius
+                )
+                
                 if j > 0:
                     trajectories[i]['rewards'][j-1] = reward
-                    # print(reward, trajectories[i]['rewards'][j-1])
             # Set the reward of the last step to 0
             # Calculate the mean of all rewards in the trajectories
             if save_traj and not del_traj:
@@ -223,7 +255,7 @@ def experiment(
     # for i in sorted(del_list, reverse=True):
     #     del trajectories[i]
 
-    trajectories = sampled_traj
+    trajectories = convert_observations_to_dict_format(trajectories)
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
@@ -300,7 +332,7 @@ def experiment(
                 p=p_sample,  # reweights so we sample according to timesteps
             )
 
-        s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
+        s, a, r, d, rtg, timesteps, mask, p, f = [], [], [], [], [], [], [], [], []
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, traj['rewards'].shape[0] - 1)
@@ -308,9 +340,10 @@ def experiment(
             # get sequences from dataset
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
-                obstacle = current_s[:, :, :100*100].reshape(1, -1, *obstacle_dim) 
-                odom = current_s[:, :, 100*100:].reshape(1, -1, odom_dim)
-                s.append(obstacle)
+                coords = current_s["voxel"]["coords"]
+                feats = current_s["voxel"]["feats"]
+                odom = current_s["odom"]
+                s.append([coords, feats])
                 p.append(odom)
             else:
                 s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
@@ -331,7 +364,8 @@ def experiment(
             # padding and state + reward normalization
             tlen = s[-1].shape[1]
             if env_name == 'ego-planner':
-                s[-1] = np.concatenate([np.zeros((1, max_len - tlen, *obstacle_dim)), s[-1]], axis=1)
+                for i in range(max_len - tlen):
+                    s[-1] = [[[(0, 0, 0)], [1]]] + s[-1]
                 p[-1] = np.concatenate([np.zeros((1, max_len - tlen, odom_dim)), p[-1]], axis=1)
             else:
                 s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
@@ -400,8 +434,8 @@ def experiment(
 
     if model_type == 'dt':
         if env_name == 'ego-planner':
-            auto_encoder = CostmapConvAutoencoder(latent_dim=128)
-            auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/auto_encoder/model_900.pth"))
+            auto_encoder = SparseVoxelAutoencoder(latent_dim=128)
+            # auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/auto_encoder/model_900.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
