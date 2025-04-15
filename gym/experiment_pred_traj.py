@@ -189,6 +189,8 @@ def experiment(
             trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
             trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
             trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
+            save_traj = False
+            del_traj = False
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -544,10 +546,10 @@ def experiment(
         if (iter + 1) % 500 == 0:
             min_action_error = outputs['training/train_loss_mean']
             current_date = datetime.now().strftime('%Y-%m-%d')
-            folder_name = f"{PROJECT_PATH}/model/embed_256/{iter + 1}_{min_action_error:e}"
+            folder_name = f"{PROJECT_PATH}/model/3d_end-to-end/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            save_other_model_path = os.path.join(folder_name, 'total_model.pth')
+            save_other_model_path = os.path.join(folder_name, '3d_model.pth')
             model_dict = model.state_dict()
             torch.save(model_dict, save_other_model_path)
             print(f"Model saved at iteration {iter+1}")
