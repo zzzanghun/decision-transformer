@@ -33,7 +33,7 @@ def discount_cumsum(x, gamma):
         discount_cumsum[t] = x[t] + gamma * discount_cumsum[t+1]
     return discount_cumsum
 
-def preprocessing_obs_for_minkowski(voxel_map):
+def preprocessing_obs_for_minkowski(voxel_map, device):
     voxel_map = voxel_map.reshape(10, 50, 50)
 
     coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
@@ -42,7 +42,7 @@ def preprocessing_obs_for_minkowski(voxel_map):
     batch_idx = np.zeros((coords.shape[0], 1), dtype=np.int32)
     coords = np.hstack((batch_idx, coords)).astype(np.int32)
 
-    return torch.tensor(coords, dtype=torch.int32), torch.tensor(feats, dtype=torch.float32)
+    return torch.tensor(coords, dtype=torch.int32, device=device), torch.tensor(feats, dtype=torch.float32, device=device)
 
 def calculate_distance_from_center_using_coords(coords, center_coord=(5, 25, 25), reward_radius=20):
     """
@@ -90,33 +90,30 @@ def calculate_distance_from_center_using_coords(coords, center_coord=(5, 25, 25)
     
     return min_distance, reward
 
-def convert_observations_to_dict_format(trajectories):
+def convert_observations_to_dict_format(traj, device):
     """NumPy 배열 형태의 observations를 Python 딕셔너리 리스트로 변환"""
-    for traj in trajectories:
-        new_observations = []
-        for j in range(len(traj['observations'])):
-            # 복셀 데이터와 오돔 데이터 분리
-            voxel_data = traj['observations'][j][:, :10*50*50]
-            odom_data = traj['observations'][j][:, 10*50*50:]
-            
-            # 복셀 데이터를 MinkowskiEngine 형식으로 변환
-            voxel_reshaped = voxel_data.reshape(10, 50, 50)
-            coords, feats = preprocessing_obs_for_minkowski(voxel_reshaped)
-            
-            # 새 관측값 형식: 딕셔너리
-            new_obs = {
-                'voxel': {
-                    'coords': coords,
-                    'feats': feats
-                },
-                'odom': odom_data
-            }
-            new_observations.append(new_obs)
+    new_observations = []
+    for i in range(len(traj)):
+        print(traj[i].shape)
+        # 복셀 데이터와 오돔 데이터 분리
+        voxel_data = traj[i][:, :10*50*50]
+        odom_data = traj[i][:, 10*50*50:]
         
-        # 기존 observations를 새 형식으로 대체
-        traj['observations'] = new_observations
+        # 복셀 데이터를 MinkowskiEngine 형식으로 변환
+        voxel_reshaped = voxel_data.reshape(10, 50, 50)
+        coords, feats = preprocessing_obs_for_minkowski(voxel_reshaped, device)
+        
+        # 새 관측값 형식: 딕셔너리
+        new_obs = {
+            'voxel': {
+                'coords': coords,
+                'feats': feats
+            },
+            'odom': odom_data
+        }
+        new_observations.append(new_obs)
     
-    return trajectories
+    return new_observations
 
 def experiment(
         exp_prefix,
@@ -170,24 +167,14 @@ def experiment(
 
     # load dataset
     if env_name == 'ego-planner':
-        odom_dim = 8
-        act_dim = 6
+        odom_dim = 12
+        act_dim = 9
         reward_radius = 20
         obstacle_dim = (10, 50, 50)
-        for i in range(1, 30):
-            dataset_path = f'{PROJECT_PATH}/gym/data/ego/odom_300/ego-planner-data_{i}.pkl'
-            if i == 1:
-                with open(dataset_path, 'rb') as f:
-                    trajectories = pickle.load(f)
-            else:
-                with open(dataset_path, 'rb') as f:
-                    trajectories += pickle.load(f)
-            # with open(dataset_path, 'rb') as f:
-            #     trajectories += pickle.load(f)
-        for i in range(1, 30):
-            dataset_path = f'{PROJECT_PATH}/gym/data/ego/odom_400/ego-planner-data_{i}.pkl'
-            with open(dataset_path, 'rb') as f:
-                trajectories += pickle.load(f)
+        dataset_path = f'{PROJECT_PATH}/gym/data/3d/3d_data.pkl'
+        with open(dataset_path, 'rb') as f:
+            trajectories = pickle.load(f)
+
 
         # Define the indices of the actions to be used
         action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
@@ -198,7 +185,7 @@ def experiment(
         for i in range(len(trajectories)):
             trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
             trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
-            trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'])
+            trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -252,11 +239,7 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    # for i in sorted(del_list, reverse=True):
-    #     del trajectories[i]
-
-    trajectories = convert_observations_to_dict_format(trajectories)
-
+    trajectories = sampled_traj
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
     # save all path information into separate lists
@@ -276,6 +259,14 @@ def experiment(
     # state_mean, state_std = np.mean(states, axis=0), np.std(states, axis=0) + 1e-6
 
     num_timesteps = sum(traj_lens)
+
+    if log_to_wandb:
+        wandb.init(
+            name="end-to-end",
+            group=group_name,
+            project='decision-transformer',
+            config=variant
+        )
 
     print('=' * 50)
     print(f'Starting new experiment: {env_name} {dataset}')
@@ -308,7 +299,6 @@ def experiment(
         action_sums = np.array([np.sum(np.abs(trajectory['actions'])) for trajectory in trajectories])
         p_action_sample = action_sums / np.sum(action_sums)
 
-
     def get_batch(batch_size=256, max_len=K):
         if get_batch_random:
             batch_inds = np.random.choice(
@@ -332,7 +322,7 @@ def experiment(
                 p=p_sample,  # reweights so we sample according to timesteps
             )
 
-        s, a, r, d, rtg, timesteps, mask, p, f = [], [], [], [], [], [], [], [], []
+        s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, traj['rewards'].shape[0] - 1)
@@ -340,14 +330,30 @@ def experiment(
             # get sequences from dataset
             if env_name == 'ego-planner':
                 current_s = traj['observations'][si:si + max_len]
-                coords = current_s["voxel"]["coords"]
-                feats = current_s["voxel"]["feats"]
-                odom = current_s["odom"]
-                s.append([coords, feats])
+                
+                # 각 타임스텝마다 [coords, feats] 쌍을 만듭니다
+                timestep_pairs = []
+                for obs in current_s:
+                    coords = obs['voxel']['coords']
+                    feats = obs['voxel']['feats']
+                    timestep_pairs.append([coords, feats])
+                    # print(coords.shape, feats.shape, "coords, feats")
+                
+                # shape: (1, t_len, 2, (coords_shape, feats_shape))
+                voxel = [timestep_pairs]  # 배치 차원 추가 (1, t_len, 2, ...)
+
+                # print(len(voxel), len(voxel[-1]), len(voxel[-1][-1]), "voxel")
+
+                # print(voxel[-1][-1][-1], "voxel[-1][-1][-1].shape")
+                
+                # odom 데이터 처리
+                odom = np.stack([obs['odom'] for obs in current_s], axis=0).reshape(1, -1, 12)
+                
+                s.append(voxel)
                 p.append(odom)
             else:
                 s.append(traj['observations'][si:si + max_len].reshape(1, -1, state_dim))
-            a.append(traj['actions'][si:si + max_len][:, :6].reshape(1, -1, act_dim))
+            a.append(traj['actions'][si:si + max_len].reshape(1, -1, act_dim))
             # for i in range(len(a[0])):
             #     print(a[-1][i])
             r.append(traj['rewards'][si:si + max_len].reshape(1, -1, 1))
@@ -355,17 +361,19 @@ def experiment(
                 d.append(traj['terminals'][si:si + max_len].reshape(1, -1))
             else:
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
-            timesteps.append(np.arange(0, 0 + s[-1].shape[1]).reshape(1, -1))
+            timesteps.append(np.arange(0, 0 + p[-1].shape[1]).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
-            rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+2], gamma=1.)[:s[-1].shape[1] + 1].reshape(1, -1, 1))
-            if rtg[-1].shape[1] <= s[-1].shape[1]:
+            rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+2], gamma=1.)[:p[-1].shape[1] + 1].reshape(1, -1, 1))
+            if rtg[-1].shape[1] <= p[-1].shape[1]:
                 rtg[-1] = np.concatenate([rtg[-1], np.zeros((1, 1, 1))], axis=1)
 
             # padding and state + reward normalization
-            tlen = s[-1].shape[1]
+            tlen = p[-1].shape[1]
             if env_name == 'ego-planner':
                 for i in range(max_len - tlen):
-                    s[-1] = [[[(0, 0, 0)], [1]]] + s[-1]
+                    s[-1][-1] = [[torch.zeros((1, 4), device=device), torch.ones((1, 1), device=device)]] + s[-1][-1]
+                # print(len(s[-1]), len(s[-1][-1]), len(s[-1][-1][-1]), s[-1][-1][-1][-1].shape, s[-1][-1][-1][0].shape, "s")
+
                 p[-1] = np.concatenate([np.zeros((1, max_len - tlen, odom_dim)), p[-1]], axis=1)
             else:
                 s[-1] = np.concatenate([np.zeros((1, max_len - tlen, state_dim)), s[-1]], axis=1)
@@ -376,7 +384,7 @@ def experiment(
             rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / max_len
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
-        s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
+        # s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
         a = torch.from_numpy(np.concatenate(a, axis=0)).to(dtype=torch.float32, device=device)
         r = torch.from_numpy(np.concatenate(r, axis=0)).to(dtype=torch.float32, device=device)
         d = torch.from_numpy(np.concatenate(d, axis=0)).to(dtype=torch.long, device=device)
@@ -527,15 +535,6 @@ def experiment(
             loss_fn=lambda s_hat, a_hat, r_hat, s, a, r: torch.mean((a_hat - a)**2),
             eval_fns=[eval_episodes(tar) for tar in env_targets],
         )
-
-    if log_to_wandb:
-        wandb.init(
-            name=exp_prefix,
-            group=group_name,
-            project='decision-transformer',
-            config=variant
-        )
-        # wandb.watch(model)  # wandb has some bug
 
     min_action_error = 1000000
 

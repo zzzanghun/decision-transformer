@@ -100,6 +100,7 @@ def create_batch_manually(dataset, batch_size, indices):
         coords[:, 0] = i  # batch index 설정
         coordinates_list.append(coords)
         features_list.append(item['features'])
+        # print(coords.shape, item['features'].shape, "coords, features")
     
     # 각 리스트의 텐서를 하나로 합침
     if coordinates_list:  # 리스트가 비어있지 않은 경우

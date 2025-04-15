@@ -94,8 +94,7 @@ class DecisionTransformer(TrajectoryModel):
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
-
-        batch_size, seq_length = states.shape[0], states.shape[1]
+        batch_size, seq_length = actions.shape[0], actions.shape[1]
 
         if attention_mask is None:
             # attention mask for GPT: 1 if can be attended to, 0 if not
@@ -103,10 +102,61 @@ class DecisionTransformer(TrajectoryModel):
 
         # embed each modality with a different head
         if isinstance(self.state_dim, tuple):
-            obstacles = states.view(-1, *self.state_dim)
-            obstacles_embeddings = self.embed_state(obstacles)
-            obstacles_embeddings = obstacles_embeddings.view(batch_size, seq_length, self.before_concat_hidden_size)
+            # states: (Batch, Seq, 2, (coords, feats))
+            # MinkowskiEngine을 사용하여 희소 복셀 처리
+            
+            # 시퀀스의 각 타임스텝마다 별도로 처리
+            obstacles_embeddings_list = []
+            
+            for t in range(seq_length):
+                # 현재 타임스텝의 모든 배치 데이터 수집
+                coords_list, feats_list = [], []
+                
+                for b in range(batch_size):
+                    coords = states[b][0][t][0]  # 첫 번째 [0]은 리스트 접근, 두 번째 [0]은 coords
+                    feats = states[b][0][t][1]   # 첫 번째 [1]은 리스트 접근, 두 번째 [0]은 feats
+                    
+                    # 배치 인덱스 설정 (중요: 원본 배치 인덱스를 b로 변경)
+                    coords[:, 0] = b
+                    coords_list.append(coords)
+                    feats_list.append(feats)
 
+                # 좌표와 특성 데이터를 하나의 텐서로 결합
+                combined_coords = torch.cat(coords_list, dim=0)
+                combined_feats = torch.cat(feats_list, dim=0)
+                
+                # MinkowskiEngine 스파스 텐서 생성
+                sparse_tensor = ME.SparseTensor(
+                    features=combined_feats,
+                    coordinates=combined_coords,
+                    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                )
+                
+                # 인코더 네트워크 통과
+                x = self.encoder(sparse_tensor)
+                
+                # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환
+                x = self.global_pool(x)
+                
+                # 최종 임베딩 생성
+                embeddings = self.fc_enc(x.F)
+                
+                # 배치 크기가 고정된 텐서로 변환 (만약 일부 배치가 누락된 경우 0으로 채움)
+                obstacle_embeddings = torch.zeros(batch_size, embeddings.shape[1], device=embeddings.device)
+                a = 0
+                for idx, b in enumerate(list(set(combined_coords[:, 0].cpu().numpy()))):
+                    a += 1
+                    obstacle_embeddings[int(b)] = embeddings[idx]
+                else:
+                    # 데이터가 없는 경우 0으로 채움
+                    obstacle_embeddings = torch.zeros(batch_size, 128, device=actions.device)
+                
+                obstacles_embeddings_list.append(obstacle_embeddings)
+            
+            # 시퀀스 차원을 따라 임베딩 스택
+            obstacles_embeddings = torch.stack(obstacles_embeddings_list, dim=1)
+            
+            # odom 임베딩과 결합
             odom_embeddings = self.embed_odom(odom)
             state_embeddings = torch.cat((obstacles_embeddings, odom_embeddings), dim=-1)
         else:
