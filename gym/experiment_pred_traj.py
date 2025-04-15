@@ -39,6 +39,10 @@ def preprocessing_obs_for_minkowski(voxel_map, device):
     coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
     feats = voxel_map[voxel_map > 0].reshape(-1, 1).astype(np.float32)
 
+    # 만약에 coords에 아무런 요소가 없다면
+    if coords.shape[0] == 0:
+        coords = np.zeros((1, 3), dtype=np.int32)
+        feats = np.zeros((1,1), dtype=np.float32)
     batch_idx = np.zeros((coords.shape[0], 1), dtype=np.int32)
     coords = np.hstack((batch_idx, coords)).astype(np.int32)
 
@@ -94,7 +98,6 @@ def convert_observations_to_dict_format(traj, device):
     """NumPy 배열 형태의 observations를 Python 딕셔너리 리스트로 변환"""
     new_observations = []
     for i in range(len(traj)):
-        print(traj[i].shape)
         # 복셀 데이터와 오돔 데이터 분리
         voxel_data = traj[i][:, :10*50*50]
         odom_data = traj[i][:, 10*50*50:]
@@ -211,8 +214,6 @@ def experiment(
                 
                 trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
                 
-                if feats.shape[0] == 0:
-                    del_traj = True
                 
                 # coords를 활용해서 중앙에서 장애물과의 거리 계산
                 min_distance, reward = calculate_distance_from_center_using_coords(
@@ -371,7 +372,7 @@ def experiment(
             tlen = p[-1].shape[1]
             if env_name == 'ego-planner':
                 for i in range(max_len - tlen):
-                    s[-1][-1] = [[torch.zeros((1, 4), device=device), torch.ones((1, 1), device=device)]] + s[-1][-1]
+                    s[-1][-1] = [[torch.zeros((1, 4), device=device), torch.zeros((1, 1), device=device)]] + s[-1][-1]
                 # print(len(s[-1]), len(s[-1][-1]), len(s[-1][-1][-1]), s[-1][-1][-1][-1].shape, s[-1][-1][-1][0].shape, "s")
 
                 p[-1] = np.concatenate([np.zeros((1, max_len - tlen, odom_dim)), p[-1]], axis=1)

@@ -117,11 +117,11 @@ class DecisionTransformer(TrajectoryModel):
                     feats = states[b][0][t][1]   # 첫 번째 [1]은 리스트 접근, 두 번째 [0]은 feats
                     
                     # 배치 인덱스 설정 (중요: 원본 배치 인덱스를 b로 변경)
-                    coords[:, 0] = b
+                    coords = coords.clone()
+                    coords[:, 0] = int(b)
                     coords_list.append(coords)
                     feats_list.append(feats)
 
-                # 좌표와 특성 데이터를 하나의 텐서로 결합
                 combined_coords = torch.cat(coords_list, dim=0)
                 combined_feats = torch.cat(feats_list, dim=0)
                 
@@ -140,18 +140,10 @@ class DecisionTransformer(TrajectoryModel):
                 
                 # 최종 임베딩 생성
                 embeddings = self.fc_enc(x.F)
+
+                assert embeddings.shape[0] == batch_size
                 
-                # 배치 크기가 고정된 텐서로 변환 (만약 일부 배치가 누락된 경우 0으로 채움)
-                obstacle_embeddings = torch.zeros(batch_size, embeddings.shape[1], device=embeddings.device)
-                a = 0
-                for idx, b in enumerate(list(set(combined_coords[:, 0].cpu().numpy()))):
-                    a += 1
-                    obstacle_embeddings[int(b)] = embeddings[idx]
-                else:
-                    # 데이터가 없는 경우 0으로 채움
-                    obstacle_embeddings = torch.zeros(batch_size, 128, device=actions.device)
-                
-                obstacles_embeddings_list.append(obstacle_embeddings)
+                obstacles_embeddings_list.append(embeddings)
             
             # 시퀀스 차원을 따라 임베딩 스택
             obstacles_embeddings = torch.stack(obstacles_embeddings_list, dim=1)
