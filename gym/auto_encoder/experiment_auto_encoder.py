@@ -8,6 +8,7 @@ import wandb
 import os
 import MinkowskiEngine as ME
 import random
+import numpy as np
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
@@ -97,18 +98,19 @@ def create_batch_manually(dataset, batch_size, indices):
     for i, idx in enumerate(indices):
         item = dataset[idx]
         coords = item['coordinates']
+        if coords.shape[0] == 0:
+            coords = np.zeros((1, 4), dtype=np.int32)
+            feats = np.zeros((1,1), dtype=np.float32)
+        else:
+            feats = item['features']
         coords[:, 0] = i  # batch index 설정
         coordinates_list.append(coords)
-        features_list.append(item['features'])
+        features_list.append(feats)
         # print(coords.shape, item['features'].shape, "coords, features")
-    
-    # 각 리스트의 텐서를 하나로 합침
-    if coordinates_list:  # 리스트가 비어있지 않은 경우
-        coordinates = torch.cat(coordinates_list, dim=0)
-        features = torch.cat(features_list, dim=0)
-        return coordinates, features
-    else:
-        return None, None
+
+    coordinates = torch.cat(coordinates_list, dim=0)
+    features = torch.cat(features_list, dim=0)
+    return coordinates, features
 
 def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -141,9 +143,6 @@ def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
             
             # 배치 데이터 생성
             coordinates, features = create_batch_manually(dataset, batch_size, batch_indices)
-            
-            if coordinates is None:  # 빈 배치 처리
-                continue
                 
             coordinates = coordinates.to(device)
             features = features.to(device)
