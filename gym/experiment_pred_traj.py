@@ -70,7 +70,7 @@ def calculate_distance_from_center_using_coords(coords, center_coord=(25, 25, 5)
         return reward_radius, 1.0
         
     # 실제 좌표는 coords[:, 1:4]에 있음 (batch_idx 제외)
-    z_center, y_center, x_center = center_coord
+    x_center, y_center, z_center = center_coord
     
     # 각 장애물 좌표에서 중심까지의 유클리드 거리 계산
     distances = np.sqrt(
@@ -103,7 +103,7 @@ def convert_observations_to_dict_format(traj, device):
         odom_data = traj[i][:, 50*50*10:]
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
-        voxel_after_reshaped = voxel_data.reshape(10, 50, 50)
+        voxel_after_reshaped = voxel_data.reshape((10, 50, 50))
 
         convert_voxel_before_flip = []
         for i in range(voxel_after_reshaped.shape[0]):
@@ -184,7 +184,7 @@ def experiment(
         odom_dim = 12
         act_dim = 9
         reward_radius = 20
-        obstacle_dim = (10, 50, 50)
+        obstacle_dim = (50, 50, 10)
         dataset_path = f'{PROJECT_PATH}/gym/data/3d/3d_data.pkl'
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
