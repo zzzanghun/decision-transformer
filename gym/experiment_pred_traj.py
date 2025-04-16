@@ -103,19 +103,9 @@ def convert_observations_to_dict_format(traj, device):
         odom_data = traj[i][:, 50*50*10:]
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
-        voxel_after_reshaped = voxel_data.reshape((10, 50, 50))
+        voxel_data = np.reshape(voxel_data, (50, 50, 10))
 
-        convert_voxel_before_flip = []
-        for i in range(voxel_after_reshaped.shape[0]):
-            ros_obs_left_right_flip = voxel_after_reshaped[i][:, ::-1]
-            ros_obs_top_bottom_flip = ros_obs_left_right_flip[::-1, :]
-            convert_voxel_before_flip.append(ros_obs_top_bottom_flip)
-
-        voxel_before_flip = np.array(convert_voxel_before_flip)
-
-        voxel_before_reshape = np.reshape(voxel_before_flip, (50, 50, 10))
-
-        coords, feats = preprocessing_obs_for_minkowski(voxel_before_reshape, device)
+        coords, feats = preprocessing_obs_for_minkowski(voxel_data, device)
         
         # 새 관측값 형식: 딕셔너리
         new_obs = {
@@ -195,51 +185,57 @@ def experiment(
         sampled_traj = []
         save_traj = False
         del_traj = False
-        
-        for i in range(len(trajectories)):
-            trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
-            trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
-            trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
-            save_traj = False
-            for j in range(len(trajectories[i]['actions'])):
-                coef = trajectories[i]['actions'][j] / action_norm
-                # Discretize to 0.001 intervals
-                coef = np.round(coef / 0.001) * 0.001
-                # Assign back
-                trajectories[i]['actions'][j] = coef
-                
-                # 새 형식으로 접근
-                odom_data = trajectories[i]['observations'][j]['odom']
-                coords = trajectories[i]['observations'][j]['voxel']['coords']
-                feats = trajectories[i]['observations'][j]['voxel']['feats']
-                
-                if np.any(np.abs(coef) > 0.1):
-                    save_traj = True
-                
-                direction_vector = odom_data[:, :3]
-                norm = np.linalg.norm(direction_vector)
-                if norm != 0:
-                    direction_vector = direction_vector / norm
-                
-                trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
-                
-                
-                # coords를 활용해서 중앙에서 장애물과의 거리 계산
-                min_distance, reward = calculate_distance_from_center_using_coords(
-                    coords, 
-                    center_coord=(25, 25, 5), 
-                    reward_radius=reward_radius
-                )
-                
-                if j > 0:
-                    trajectories[i]['rewards'][j-1] = min_distance * 0.1
-            # Set the reward of the last step to 0
-            # Calculate the mean of all rewards in the trajectories
-            if save_traj:
-                sampled_traj.append(trajectories[i])
-        all_rewards = [reward for trajectory in sampled_traj for reward in trajectory['rewards']]
-        mean_reward = np.mean(all_rewards)
-        print(f"Mean reward: {mean_reward}")
+
+        if type(trajectories[0]['observations']) == np.ndarray:
+            for i in range(len(trajectories)):
+                trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
+                trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
+                trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
+                save_traj = False
+                for j in range(len(trajectories[i]['actions'])):
+                    coef = trajectories[i]['actions'][j] / action_norm
+                    # Discretize to 0.001 intervals
+                    coef = np.round(coef / 0.001) * 0.001
+                    # Assign back
+                    trajectories[i]['actions'][j] = coef
+                    
+                    # 새 형식으로 접근
+                    odom_data = trajectories[i]['observations'][j]['odom']
+                    coords = trajectories[i]['observations'][j]['voxel']['coords']
+                    feats = trajectories[i]['observations'][j]['voxel']['feats']
+                    
+                    if np.any(np.abs(coef) > 0.1):
+                        save_traj = True
+                    
+                    direction_vector = odom_data[:, :3]
+                    norm = np.linalg.norm(direction_vector)
+                    if norm != 0:
+                        direction_vector = direction_vector / norm
+                    
+                    trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
+                    
+                    
+                    # coords를 활용해서 중앙에서 장애물과의 거리 계산
+                    min_distance, reward = calculate_distance_from_center_using_coords(
+                        coords, 
+                        center_coord=(25, 25, 5), 
+                        reward_radius=reward_radius
+                    )
+                    
+                    if j > 0:
+                        trajectories[i]['rewards'][j-1] = min_distance * 0.1
+                # Set the reward of the last step to 0
+                # Calculate the mean of all rewards in the trajectories
+                if save_traj:
+                    sampled_traj.append(trajectories[i])
+            all_rewards = [reward for trajectory in sampled_traj for reward in trajectory['rewards']]
+            mean_reward = np.mean(all_rewards)
+            print(f"Mean reward: {mean_reward}")
+            trajectories = sampled_traj
+        elif type(trajectories[0]['observations']) == list:
+            print("data already preprocessed")
+        else:
+            raise NotImplementedError
     else:
         state_dim = env.observation_space.shape[0]
         act_dim = env.action_space.shape[0]
@@ -249,7 +245,6 @@ def experiment(
             trajectories = pickle.load(f)
             print(type(trajectories))
 
-    trajectories = sampled_traj
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 
     # save all path information into separate lists
