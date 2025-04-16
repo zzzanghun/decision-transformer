@@ -34,7 +34,7 @@ def discount_cumsum(x, gamma):
     return discount_cumsum
 
 def preprocessing_obs_for_minkowski(voxel_map, device):
-    voxel_map = voxel_map.reshape(10, 50, 50)
+    assert voxel_map.shape == (50, 50, 10)
 
     coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
     feats = voxel_map[voxel_map > 0].reshape(-1, 1).astype(np.float32)
@@ -48,7 +48,7 @@ def preprocessing_obs_for_minkowski(voxel_map, device):
 
     return torch.tensor(coords, dtype=torch.int32, device=device), torch.tensor(feats, dtype=torch.float32, device=device)
 
-def calculate_distance_from_center_using_coords(coords, center_coord=(5, 25, 25), reward_radius=20):
+def calculate_distance_from_center_using_coords(coords, center_coord=(25, 25, 5), reward_radius=20):
     """
     MinkowskiEngine용으로 변환된 희소 좌표를 사용하여 중심에서 가장 가까운 장애물까지의 거리 계산
     
@@ -74,9 +74,9 @@ def calculate_distance_from_center_using_coords(coords, center_coord=(5, 25, 25)
     
     # 각 장애물 좌표에서 중심까지의 유클리드 거리 계산
     distances = np.sqrt(
-        (coords[:, 0] - z_center)**2 + 
-        (coords[:, 1] - y_center)**2 + 
-        (coords[:, 2] - x_center)**2
+        (coords[:, 1] - x_center)**2 + 
+        (coords[:, 2] - y_center)**2 + 
+        (coords[:, 3] - z_center)**2
     )
     
     # reward_radius 이내의 장애물만 고려
@@ -99,12 +99,23 @@ def convert_observations_to_dict_format(traj, device):
     new_observations = []
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
-        voxel_data = traj[i][:, :10*50*50]
-        odom_data = traj[i][:, 10*50*50:]
-        
+        voxel_data = traj[i][:, :50*50*10]
+        odom_data = traj[i][:, 50*50*10:]
+
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
-        voxel_reshaped = voxel_data.reshape(10, 50, 50)
-        coords, feats = preprocessing_obs_for_minkowski(voxel_reshaped, device)
+        voxel_after_reshaped = voxel_data.reshape(10, 50, 50)
+
+        convert_voxel_before_flip = []
+        for i in range(voxel_after_reshaped.shape[0]):
+            ros_obs_left_right_flip = voxel_after_reshaped[i][:, ::-1]
+            ros_obs_top_bottom_flip = ros_obs_left_right_flip[::-1, :]
+            convert_voxel_before_flip.append(ros_obs_top_bottom_flip)
+
+        voxel_before_flip = np.array(convert_voxel_before_flip)
+
+        voxel_before_reshape = np.reshape(voxel_before_flip, (50, 50, 10))
+
+        coords, feats = preprocessing_obs_for_minkowski(voxel_before_reshape, device)
         
         # 새 관측값 형식: 딕셔너리
         new_obs = {
@@ -190,7 +201,6 @@ def experiment(
             trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
             trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
             save_traj = False
-            del_traj = False
             for j in range(len(trajectories[i]['actions'])):
                 coef = trajectories[i]['actions'][j] / action_norm
                 # Discretize to 0.001 intervals
@@ -205,9 +215,6 @@ def experiment(
                 
                 if np.any(np.abs(coef) > 0.1):
                     save_traj = True
-                if np.any(np.abs(coef) > 2.0):
-                    print(f"x_coef in trajectory {i} has values exceeding |{6}|: {coef[np.abs(coef) > 2]}")
-                    del_traj = True
                 
                 direction_vector = odom_data[:, :3]
                 norm = np.linalg.norm(direction_vector)
@@ -220,7 +227,7 @@ def experiment(
                 # coords를 활용해서 중앙에서 장애물과의 거리 계산
                 min_distance, reward = calculate_distance_from_center_using_coords(
                     coords, 
-                    center_coord=(5, 25, 25), 
+                    center_coord=(25, 25, 5), 
                     reward_radius=reward_radius
                 )
                 
@@ -228,7 +235,7 @@ def experiment(
                     trajectories[i]['rewards'][j-1] = reward
             # Set the reward of the last step to 0
             # Calculate the mean of all rewards in the trajectories
-            if save_traj and not del_traj:
+            if save_traj:
                 sampled_traj.append(trajectories[i])
         all_rewards = [reward for trajectory in sampled_traj for reward in trajectory['rewards']]
         mean_reward = np.mean(all_rewards)
