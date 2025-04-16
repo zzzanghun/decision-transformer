@@ -64,7 +64,7 @@ def calculate_distance_from_center_using_coords(coords, center_coord=(25, 25, 5)
     # coords가 torch.Tensor인 경우 numpy로 변환
     if isinstance(coords, torch.Tensor):
         coords = coords.cpu().numpy()
-    
+
     # coords가 비어있는 경우 (장애물이 없는 경우)
     if coords.shape[0] == 0:
         return reward_radius, 1.0
@@ -232,7 +232,7 @@ def experiment(
                 )
                 
                 if j > 0:
-                    trajectories[i]['rewards'][j-1] = reward
+                    trajectories[i]['rewards'][j-1] = min_distance * 0.1
             # Set the reward of the last step to 0
             # Calculate the mean of all rewards in the trajectories
             if save_traj:
