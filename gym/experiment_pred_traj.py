@@ -25,7 +25,6 @@ PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 print(PROJECT_PATH)
 
-
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
     discount_cumsum[-1] = x[-1]
@@ -34,7 +33,7 @@ def discount_cumsum(x, gamma):
     return discount_cumsum
 
 def preprocessing_obs_for_minkowski(voxel_map, device):
-    assert voxel_map.shape == (50, 50, 10)
+    assert voxel_map.shape == (100, 100, 10)
 
     coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
     feats = voxel_map[voxel_map > 0].reshape(-1, 1).astype(np.float32)
@@ -48,7 +47,7 @@ def preprocessing_obs_for_minkowski(voxel_map, device):
 
     return torch.tensor(coords, dtype=torch.int32, device=device), torch.tensor(feats, dtype=torch.float32, device=device)
 
-def calculate_distance_from_center_using_coords(coords, center_coord=(25, 25, 5), reward_radius=20):
+def calculate_distance_from_center_using_coords(coords, center_coord=(50, 50, 5), reward_radius=20):
     """
     MinkowskiEngine용으로 변환된 희소 좌표를 사용하여 중심에서 가장 가까운 장애물까지의 거리 계산
     
@@ -99,11 +98,11 @@ def convert_observations_to_dict_format(traj, device):
     new_observations = []
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
-        voxel_data = traj[i][:, :50*50*10]
-        odom_data = traj[i][:, 50*50*10:]
+        voxel_data = traj[i][:, :100*100*10]
+        odom_data = traj[i][:, 100*100*10:]
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
-        voxel_data = np.reshape(voxel_data, (50, 50, 10))
+        voxel_data = np.reshape(voxel_data, (100, 100, 10))
 
         coords, feats = preprocessing_obs_for_minkowski(voxel_data, device)
         
@@ -171,17 +170,19 @@ def experiment(
 
     # load dataset
     if env_name == 'ego-planner':
-        odom_dim = 12
+        odom_dim = 9
         act_dim = 9
         reward_radius = 20
-        obstacle_dim = (50, 50, 10)
-        dataset_path = f'{PROJECT_PATH}/gym/data/3d/3d_data.pkl'
+        obstacle_dim = (100, 100, 10)
+        # dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/ego-3d-data_1.pkl'
+        dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/medial-3d-data_1.pkl'
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
 
 
         # Define the indices of the actions to be used
         action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
+        obs_indices = [0, 1, 2, 3, 4, 5, 9, 10, 11]
         sampled_traj = []
         save_traj = False
         del_traj = False
@@ -191,11 +192,11 @@ def experiment(
                 trajectories[i]['actions'] = trajectories[i]['actions'][:, action_indices]
                 trajectories[i]['rewards'] = np.zeros(len(trajectories[i]['actions']), dtype=float)
                 trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
-                save_traj = False
+                save_traj = True
                 for j in range(len(trajectories[i]['actions'])):
                     coef = trajectories[i]['actions'][j] / action_norm
                     # Discretize to 0.001 intervals
-                    coef = np.round(coef / 0.001) * 0.001
+                    # coef = np.round(coef / 0.001) * 0.001
                     # Assign back
                     trajectories[i]['actions'][j] = coef
                     
@@ -204,8 +205,8 @@ def experiment(
                     coords = trajectories[i]['observations'][j]['voxel']['coords']
                     feats = trajectories[i]['observations'][j]['voxel']['feats']
                     
-                    if np.any(np.abs(coef) > 0.1):
-                        save_traj = True
+                    # if np.any(np.abs(coef) > 0.1):
+                    #     save_traj = True
                     
                     direction_vector = odom_data[:, :3]
                     norm = np.linalg.norm(direction_vector)
@@ -213,12 +214,13 @@ def experiment(
                         direction_vector = direction_vector / norm
                     
                     trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
+                    trajectories[i]['observations'][j]['odom'] = trajectories[i]['observations'][j]['odom'][:, obs_indices]
                     
                     
                     # coords를 활용해서 중앙에서 장애물과의 거리 계산
                     min_distance, reward = calculate_distance_from_center_using_coords(
                         coords, 
-                        center_coord=(25, 25, 5), 
+                        center_coord=(50, 50, 5), 
                         reward_radius=reward_radius
                     )
                     
@@ -352,7 +354,7 @@ def experiment(
                 # print(voxel[-1][-1][-1], "voxel[-1][-1][-1].shape")
                 
                 # odom 데이터 처리
-                odom = np.stack([obs['odom'] for obs in current_s], axis=0).reshape(1, -1, 12)
+                odom = np.stack([obs['odom'] for obs in current_s], axis=0).reshape(1, -1, 9)
                 
                 s.append(voxel)
                 p.append(odom)
@@ -588,7 +590,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--extended_cnn', type=bool, default=True)
-    parser.add_argument('--time_embedding', type=bool, default=True)
+    parser.add_argument('--time_embedding', type=bool, default=False)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
     
     args = parser.parse_args()
