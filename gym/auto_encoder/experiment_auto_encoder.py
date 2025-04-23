@@ -12,7 +12,7 @@ import numpy as np
 
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-def sparse_tensor_to_dense_voxel(sparse_tensor, voxel_shape=(10, 50, 50), threshold=0.5):
+def sparse_tensor_to_dense_voxel(sparse_tensor, voxel_shape=(100, 100, 10), threshold=0.5):
     """
     Minkowski SparseTensor를 dense voxel map으로 변환합니다.
     (batch_size, 10, 50, 50) 크기의 dense tensor 반환
@@ -33,14 +33,14 @@ def sparse_tensor_to_dense_voxel(sparse_tensor, voxel_shape=(10, 50, 50), thresh
     return dense_voxels_binary
 
 def voxel_accuracy(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
-    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (10, 50, 50), threshold=0.5)
-    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (10, 50, 50), threshold=0.5)
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.5)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.5)
 
     return (output_dense_voxels == target_dense_voxels).float().sum() / target_dense_voxels.numel()
 
 def voxel_recall(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
-    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (10, 50, 50), threshold=0.5)
-    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (10, 50, 50), threshold=0.5)
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.5)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.5)
     true_positives = ((output_dense_voxels == 1) & (target_dense_voxels == 1)).float().sum()
     total_actual_positives = (target_dense_voxels == 1).float().sum()
 
@@ -186,7 +186,7 @@ def train_autoencoder(model, dataset, epochs=10, batch_size=64, lr=1e-4):
                 "voxel_recall": voxel_recall_value
             })
 
-        if (epoch + 1) % 100 == 0:
+        if (epoch + 1) % 10 == 0:
             folder_name = f"{PROJECT_PATH}/model/3d_auto_encoder"
             os.makedirs(folder_name, exist_ok=True)
             torch.save(model.state_dict(),

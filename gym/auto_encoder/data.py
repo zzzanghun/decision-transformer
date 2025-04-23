@@ -23,7 +23,7 @@ class CostmapDataset(Dataset):
         self.data = []
         for traj in trajectories:
             for obs in traj['observations']:
-                voxel_map = obs[:, :10*50*50].reshape(10, 50, 50)
+                voxel_map = obs[:, :100*100*100].reshape(100, 100, 10)
                 if np.sum(voxel_map) == 0:
                     continue
                 self.data.append(voxel_map.copy())
@@ -36,6 +36,10 @@ class CostmapDataset(Dataset):
 
         coords = np.argwhere(voxel_map > 0)  # 0이 아닌 voxel 좌표만 추출
         feats = voxel_map[voxel_map > 0].reshape(-1, 1).astype(np.float32)
+
+        if coords.shape[0] == 0:
+            coords = np.zeros((1, 3), dtype=np.int32)
+            feats = np.zeros((1,1), dtype=np.float32)
 
         # batch index 추가: dataloader의 collate_fn에서 처리 예정 (일단은 0으로 넣어둠)
         batch_idx = np.zeros((coords.shape[0], 1), dtype=np.int32)
