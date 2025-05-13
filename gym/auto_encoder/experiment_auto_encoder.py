@@ -33,14 +33,14 @@ def sparse_tensor_to_dense_voxel(sparse_tensor, voxel_shape=(100, 100, 10), thre
     return dense_voxels_binary
 
 def voxel_accuracy(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
-    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.5)
-    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.5)
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.9)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.9)
 
     return (output_dense_voxels == target_dense_voxels).float().sum() / target_dense_voxels.numel()
 
 def voxel_recall(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
-    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.5)
-    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.5)
+    output_dense_voxels = sparse_tensor_to_dense_voxel(output_sparse_tensor, (100, 100, 10), threshold=0.9)
+    target_dense_voxels = sparse_tensor_to_dense_voxel(target_sparse_tensor, (100, 100, 10), threshold=0.9)
     true_positives = ((output_dense_voxels == 1) & (target_dense_voxels == 1)).float().sum()
     total_actual_positives = (target_dense_voxels == 1).float().sum()
 
