@@ -26,6 +26,13 @@ class CostmapDataset(Dataset):
                 voxel_map = obs[:, :100*100*10].reshape(100, 100, 10)
                 if np.sum(voxel_map) == 0:
                     continue
+                
+                # 1보다 큰 값이 있는지 확인
+                max_value = np.max(voxel_map)
+                if max_value > 1:
+                    print(f"1보다 큰 값 발견: {max_value}, 최소값: {np.min(voxel_map[voxel_map > 0])}, 평균값: {np.mean(voxel_map[voxel_map > 0])}")
+                    print(f"1보다 큰 값의 개수: {np.sum(voxel_map > 1)}/{np.sum(voxel_map > 0)}")
+                
                 self.data.append(voxel_map.copy())
 
     def __len__(self):
