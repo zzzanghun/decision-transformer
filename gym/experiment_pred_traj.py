@@ -98,6 +98,7 @@ def convert_observations_to_dict_format(traj, device):
     new_observations = []
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
+        traj[i][:, :20] = 0.0
         voxel_data = traj[i][:, :100*100*10]
         odom_data = traj[i][:, 100*100*10:]
 
@@ -174,10 +175,11 @@ def experiment(
         act_dim = 9
         reward_radius = 20
         obstacle_dim = (100, 100, 10)
+        trajectories = []
         # dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/ego-3d-data_1.pkl'
         dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/medial-3d-data_1.pkl'
         with open(dataset_path, 'rb') as f:
-            trajectories = pickle.load(f)
+            trajectories += pickle.load(f)
 
 
         # Define the indices of the actions to be used
