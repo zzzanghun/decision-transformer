@@ -86,8 +86,10 @@ def reconstruction_accuracy_iou(output_sparse_tensor, target_sparse_tensor, thre
     
     iou = intersection / union
 
-    # accuracy 계산
-    accuracy = intersection / target_binary.numel()
+    # 정확한 Accuracy 계산
+    total_elements = target_binary.numel()
+    correct_predictions = ((output_binary == target_binary).float().sum())
+    accuracy = correct_predictions / total_elements
     
     return iou, accuracy
 
@@ -218,3 +220,12 @@ if __name__ == "__main__":
 
     print("Input Sparse shape:", features.shape)
     print("Output Sparse shape:", reconstructed.F.shape)
+
+    # 이미 정의된 sparse_tensor_to_dense_voxel 함수 활용
+    output_dense = sparse_tensor_to_dense_voxel(reconstructed, threshold=0.5)
+    target_dense = sparse_tensor_to_dense_voxel(test_item['coordinates'], threshold=0.5)
+    
+    # 전체 공간의 정확도 계산
+    accuracy = (output_dense == target_dense).float().sum() / target_dense.numel()
+
+    print(f"Overall Accuracy: {accuracy:.4f}")
