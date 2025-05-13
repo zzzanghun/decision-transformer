@@ -63,7 +63,7 @@ def minkowski_collate_fn(batch):
 def sparse_mse_loss(output_sparse_tensor, target_sparse_tensor):
     return torch.nn.functional.mse_loss(output_sparse_tensor.F, target_sparse_tensor.F)
 
-def reconstruction_accuracy_iou(output_sparse_tensor, target_sparse_tensor, threshold=0.5):
+def reconstruction_accuracy_iou(output_sparse_tensor, target_sparse_tensor, threshold=0.9):
     # 출력과 타겟의 좌표 가져오기
     out_coords = output_sparse_tensor.C.cpu().numpy()
     target_coords = target_sparse_tensor.C.cpu().numpy()
