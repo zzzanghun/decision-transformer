@@ -27,6 +27,7 @@ class DecisionTransformer(TrajectoryModel):
             time_embedding=True,
             coef_time_embedding=1,
             auto_encoder=None,
+            auto_encoder_load=False,
             **kwargs
     ):
         super().__init__(state_dim, act_dim, max_length=max_length)
@@ -51,7 +52,17 @@ class DecisionTransformer(TrajectoryModel):
 
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
-            if extended_cnn:
+            if auto_encoder_load:
+                self.encoder = auto_encoder.encoder
+                self.fc_enc = auto_encoder.fc_enc
+                self.global_pool = auto_encoder.global_pool
+                for param in self.encoder.parameters():
+                    param.requires_grad = False
+                for param in self.fc_enc.parameters():
+                    param.requires_grad = False
+                for param in self.global_pool.parameters():
+                    param.requires_grad = False
+            else:
                 self.encoder = nn.Sequential(
                     ME.MinkowskiConvolution(1, 32, kernel_size=3, stride=1, dimension=3),
                     ME.MinkowskiBatchNorm(32),
@@ -69,17 +80,7 @@ class DecisionTransformer(TrajectoryModel):
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.fc_enc = nn.Linear(128, 128)
-            else:
-                self.embed_state = nn.Sequential(
-                    nn.Conv2d(in_channels=1, out_channels=32, kernel_size=8, stride=4),
-                    nn.ReLU(),
-                    nn.Conv2d(in_channels=32, out_channels=64, kernel_size=4, stride=2),
-                    nn.ReLU(),
-                    nn.Flatten(),
-                    nn.Linear(in_features=64 * 9 * 9, out_features=self.before_concat_hidden_size)
-                )
             self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
-
         else:
             self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
         self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)

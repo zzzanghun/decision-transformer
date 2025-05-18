@@ -129,8 +129,7 @@ def experiment(
     get_batch_action_sum = variant.get('get_batch_action_sum', False)
     model_load = variant.get('model_load')
     model_path = variant.get('model_path')
-    extended_cnn = variant.get('extended_cnn')
-
+    auto_encoder_load = variant.get('auto_encoder_load')
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
@@ -452,7 +451,8 @@ def experiment(
     if model_type == 'dt':
         if env_name == 'ego-planner':
             auto_encoder = SparseVoxelAutoencoder(latent_dim=128)
-            # auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/auto_encoder/model_900.pth"))
+            if auto_encoder_load:
+                auto_encoder.load_state_dict(torch.load(f"{PROJECT_PATH}/gym/model/sparse_voxel_autoencoder.pth"))
             model = DecisionTransformer(
                 state_dim=obstacle_dim,
                 odom_dim=odom_dim,
@@ -460,6 +460,7 @@ def experiment(
                 max_length=K,
                 max_ep_len=max_ep_len,
                 auto_encoder=auto_encoder,
+                auto_encoder_load=auto_encoder_load,
                 hidden_size=variant['embed_dim'],
                 n_layer=variant['n_layer'],
                 n_head=variant['n_head'],
@@ -468,7 +469,6 @@ def experiment(
                 n_positions=1024,
                 resid_pdrop=variant['dropout'],
                 attn_pdrop=variant['dropout'],
-                extended_cnn=extended_cnn,
                 time_embedding=variant['time_embedding'],
                 coef_time_embedding=variant['coef_time_embedding']
             )
@@ -505,7 +505,7 @@ def experiment(
 
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
-        [p for n, p in model.named_parameters() if not n.startswith('embed_state.')],
+        model.parameters(),
         lr=variant['learning_rate'],
         weight_decay=variant['weight_decay'],
     )
@@ -590,8 +590,8 @@ if __name__ == '__main__':
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--get_batch_action_sum', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
+    parser.add_argument('--auto_encoder_load', type=bool, default=True)
     parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
-    parser.add_argument('--extended_cnn', type=bool, default=True)
     parser.add_argument('--time_embedding', type=bool, default=False)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
     
