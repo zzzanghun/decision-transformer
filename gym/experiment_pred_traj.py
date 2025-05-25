@@ -98,7 +98,6 @@ def convert_observations_to_dict_format(traj, device):
     new_observations = []
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
-        traj[i][:, :20] = 0.0
         voxel_data = traj[i][:, :, :100*100*10]
         odom_data = traj[i][:, :, 100*100*10:]
 
