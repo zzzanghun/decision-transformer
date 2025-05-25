@@ -98,8 +98,8 @@ def convert_observations_to_dict_format(traj, device):
     new_observations = []
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
-        voxel_data = traj[i][:, :, :100*100*10]
-        odom_data = traj[i][:, :, 100*100*10:]
+        voxel_data = traj[i][:, :100*100*10]
+        odom_data = traj[i][:, 100*100*10:]
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
         voxel_data = np.reshape(voxel_data, (100, 100, 10))
