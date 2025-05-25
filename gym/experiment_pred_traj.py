@@ -66,7 +66,7 @@ def calculate_distance_from_center_using_coords(coords, center_coord=(50, 50, 5)
 
     # coords가 비어있는 경우 (장애물이 없는 경우)
     if coords.shape[0] == 0:
-        return reward_radius, 1.0
+        return reward_radius, 2.0
         
     # 실제 좌표는 coords[:, 1:4]에 있음 (batch_idx 제외)
     x_center, y_center, z_center = center_coord
@@ -99,11 +99,12 @@ def convert_observations_to_dict_format(traj, device):
     for i in range(len(traj)):
         # 복셀 데이터와 오돔 데이터 분리
         traj[i][:, :20] = 0.0
-        voxel_data = traj[i][:, :100*100*10]
-        odom_data = traj[i][:, 100*100*10:]
+        voxel_data = traj[i][:, :, :100*100*10]
+        odom_data = traj[i][:, :, 100*100*10:]
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
         voxel_data = np.reshape(voxel_data, (100, 100, 10))
+        odom_data = np.reshape(odom_data, (1, odom_data.shape[-1]))
 
         coords, feats = preprocessing_obs_for_minkowski(voxel_data, device)
         
@@ -227,6 +228,7 @@ def experiment(
                     
                     if j > 0:
                         trajectories[i]['rewards'][j-1] = min_distance * 0.1
+                        print(trajectories[i]['rewards'][j-1], "trajectories[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories
                 if save_traj:
