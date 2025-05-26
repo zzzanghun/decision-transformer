@@ -227,7 +227,7 @@ def experiment(
                     
                     if j > 0:
                         trajectories[i]['rewards'][j-1] = min_distance * 0.1
-                        print(trajectories[i]['rewards'][j-1], "trajectories[i]['rewards'][j-1]")
+                        # print(trajectories[i]['rewards'][j-1], "trajectories[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories
                 if save_traj:
@@ -591,7 +591,7 @@ if __name__ == '__main__':
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--get_batch_action_sum', type=bool, default=True)
     parser.add_argument('--model_load', type=bool, default=False)
-    parser.add_argument('--auto_encoder_load', type=bool, default=True)
+    parser.add_argument('--auto_encoder_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--time_embedding', type=bool, default=False)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
