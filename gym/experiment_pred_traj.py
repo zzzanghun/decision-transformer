@@ -103,7 +103,6 @@ def convert_observations_to_dict_format(traj, device):
 
         # 복셀 데이터를 MinkowskiEngine 형식으로 변환
         voxel_data = np.reshape(voxel_data, (100, 100, 10))
-        odom_data = np.reshape(odom_data, (1, odom_data.shape[-1]))
 
         coords, feats = preprocessing_obs_for_minkowski(voxel_data, device)
         
