@@ -65,22 +65,28 @@ class DecisionTransformer(TrajectoryModel):
             else:
                 self.encoder = nn.Sequential(
                     ME.MinkowskiConvolution(1, 32, kernel_size=3, stride=1, dimension=3),
-                    ME.MinkowskiBatchNorm(32),
+                    # ME.MinkowskiBatchNorm(32),
                     ME.MinkowskiReLU(inplace=True),
 
                     ME.MinkowskiConvolution(32, 64, kernel_size=3, stride=2, dimension=3),
-                    ME.MinkowskiBatchNorm(64),
+                    # ME.MinkowskiBatchNorm(64),
                     ME.MinkowskiReLU(inplace=True),
 
                     ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=3),
-                    ME.MinkowskiBatchNorm(128),
+                    # ME.MinkowskiBatchNorm(128),
                     ME.MinkowskiReLU(inplace=True)
                 )
                 # Global pooling 추가
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
+                self.norm_global_pool = nn.LayerNorm(128)
                 self.fc_enc = nn.Linear(128, 128)
-            self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
+            self.embed_odom = nn.Sequential(
+                nn.Linear(odom_dim, 4 * self.before_concat_hidden_size),
+                nn.ReLU(),
+                nn.LayerNorm(4 * self.before_concat_hidden_size),   # <-- 여기
+                nn.Linear(4 * self.before_concat_hidden_size, self.before_concat_hidden_size),
+            )
             self.norm_odom = nn.LayerNorm(self.before_concat_hidden_size)
             self.norm_obstacles = nn.LayerNorm(self.before_concat_hidden_size)
         else:
@@ -140,9 +146,9 @@ class DecisionTransformer(TrajectoryModel):
                 
                 # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환
                 x = self.global_pool(x)
-                
+                x = self.norm_global_pool(x.F)
                 # 최종 임베딩 생성
-                embeddings = self.fc_enc(x.F)
+                embeddings = self.fc_enc(x)
 
                 assert embeddings.shape[0] == batch_size
                 
@@ -156,7 +162,7 @@ class DecisionTransformer(TrajectoryModel):
 
             odom_embeddings = self.norm_odom(odom_embeddings)
             obstacles_embeddings = self.norm_obstacles(obstacles_embeddings)
-            
+
             state_embeddings = torch.cat((obstacles_embeddings, odom_embeddings), dim=-1)
         else:
             state_embeddings = self.embed_state(states)
