@@ -81,6 +81,8 @@ class DecisionTransformer(TrajectoryModel):
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.fc_enc = nn.Linear(128, 128)
             self.embed_odom = torch.nn.Linear(odom_dim, self.before_concat_hidden_size)
+            self.norm_odom = nn.LayerNorm(self.before_concat_hidden_size)
+            self.norm_obstacles = nn.LayerNorm(self.before_concat_hidden_size)
         else:
             self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
         self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)
@@ -151,6 +153,10 @@ class DecisionTransformer(TrajectoryModel):
             
             # odom 임베딩과 결합
             odom_embeddings = self.embed_odom(odom)
+
+            odom_embeddings = self.norm_odom(odom_embeddings)
+            obstacles_embeddings = self.norm_obstacles(obstacles_embeddings)
+            
             state_embeddings = torch.cat((obstacles_embeddings, odom_embeddings), dim=-1)
         else:
             state_embeddings = self.embed_state(states)
