@@ -67,14 +67,17 @@ class DecisionTransformer(TrajectoryModel):
                     ME.MinkowskiConvolution(1, 32, kernel_size=3, stride=1, dimension=3),
                     # ME.MinkowskiBatchNorm(32),
                     ME.MinkowskiReLU(inplace=True),
+                    ME.MinkowskiDropout(p=0.3),
 
                     ME.MinkowskiConvolution(32, 64, kernel_size=3, stride=2, dimension=3),
                     # ME.MinkowskiBatchNorm(64),
                     ME.MinkowskiReLU(inplace=True),
+                    ME.MinkowskiDropout(p=0.3),
 
                     ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=3),
                     # ME.MinkowskiBatchNorm(128),
-                    ME.MinkowskiReLU(inplace=True)
+                    ME.MinkowskiReLU(inplace=True),
+                    ME.MinkowskiDropout(p=0.3)
                 )
                 # Global pooling 추가
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
