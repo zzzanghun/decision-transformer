@@ -346,7 +346,6 @@ def experiment(
                     feats = obs['voxel']['feats']
                     timestep_pairs.append([coords, feats])
                     # print(coords.shape, feats.shape, "coords, feats")
-                
                 # shape: (1, t_len, 2, (coords_shape, feats_shape))
                 voxel = [timestep_pairs]  # 배치 차원 추가 (1, t_len, 2, ...)
 
