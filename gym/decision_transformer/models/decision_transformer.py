@@ -1,13 +1,34 @@
 import numpy as np
 import torch
 import torch.nn as nn
-
+import math
 import transformers
+from flow_matching.path import CondOTProbPath
 
 from decision_transformer.models.model import TrajectoryModel
 from decision_transformer.models.trajectory_gpt2 import GPT2Model
 
 import MinkowskiEngine as ME
+
+def timestep_embedding(timesteps, dim, max_period=10000):
+    """
+    Create sinusoidal timestep embeddings.
+    :param timesteps: a 1-D Tensor of N indices, one per batch element.
+                      These may be fractional.
+    :param dim: the dimension of the output.
+    :param max_period: controls the minimum frequency of the embeddings.
+    :return: an [N x dim] Tensor of positional embeddings.
+    """
+    half = dim // 2
+    freqs = torch.exp(
+        -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+    ).to(device=timesteps.device)
+    args = timesteps[:, None].float() * freqs[None]
+    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+    if dim % 2:
+        embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+    return embedding
+
 class DecisionTransformer(TrajectoryModel):
 
     """
@@ -38,7 +59,7 @@ class DecisionTransformer(TrajectoryModel):
             n_embd=hidden_size,
             **kwargs
         )
-
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.odom_dim = odom_dim
         self.time_embedding = time_embedding
         self.coef_time_embedding = coef_time_embedding
@@ -104,6 +125,35 @@ class DecisionTransformer(TrajectoryModel):
             *([nn.Linear(hidden_size, self.act_dim)] + ([nn.Tanh()] if action_tanh else []))
         )
         self.predict_return = torch.nn.Linear(hidden_size, 1)
+
+        self.embed_action_time = nn.Sequential(
+                nn.Linear(self.act_dim, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.LayerNorm(hidden_size),
+        )
+        self.predict_velocity = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.ELU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.ELU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.ELU(),
+                nn.Linear(hidden_size, self.act_dim),
+        )
+        self.embed_time = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.SiLU(),
+                nn.Linear(hidden_size, hidden_size),
+                nn.LayerNorm(hidden_size),
+        )
+        self.transformer_ln = nn.LayerNorm(hidden_size)
+        self.film_gen = nn.Sequential(
+                    nn.Linear(hidden_size, hidden_size),
+                    nn.ReLU(),
+                    nn.Linear(hidden_size, 2*hidden_size)
+        )
+        self.path = CondOTProbPath()
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
         batch_size, seq_length = actions.shape[0], actions.shape[1]
@@ -205,11 +255,46 @@ class DecisionTransformer(TrajectoryModel):
         x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
 
         # get predictions
-        return_preds = self.predict_return(x[:,2])  # predict next return given state and action
-        state_preds = self.predict_state(x[:,2])    # predict next state given state and action
-        action_preds = self.predict_action(x[:,1])  # predict next action given state
+        # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
+        # state_preds = self.predict_state(x[:,2])    # predict next state given state and action
+        # action_preds = self.predict_action(x[:,1])  # predict next action given state
 
-        return state_preds, action_preds, return_preds
+        # print(x[:,1].shape, "@@@@@@")
+
+        # flat actions, x[:,1]
+        actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
+        h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        h_flat = self.transformer_ln(h_flat)
+
+        # create t, x_t, u_t
+        t = torch.rand(actions_flat.shape[0]).to(self.device)
+
+        noise = torch.randn_like(actions_flat).to(self.device)
+        path_sample = self.path.sample(t=t, x_0=noise, x_1=actions_flat)
+        x_t = path_sample.x_t
+        u_t = path_sample.dx_t
+
+        # t embedding
+        t = timestep_embedding(t, self.hidden_size)
+        t = self.embed_time(t)
+
+        # h_flat + t
+        h_flat_t = h_flat + t
+
+        # Film Gen
+        gamma_beta = self.film_gen(h_flat_t)
+        gamma, beta = gamma_beta.chunk(2, dim=-1)
+
+        # x_t embedding
+        x_t = self.embed_action_time(x_t)
+
+        # adapt Filt to x_t
+        x_t = x_t * gamma + beta
+
+        # predict u_t
+        u_t_pred = self.predict_velocity(x_t)
+
+        return u_t, u_t_pred
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model
