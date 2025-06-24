@@ -150,6 +150,7 @@ class DecisionTransformer(TrajectoryModel):
                     nn.ReLU(),
                     nn.Linear(hidden_size, 2*hidden_size)
         )
+        self.time_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
@@ -274,6 +275,7 @@ class DecisionTransformer(TrajectoryModel):
         # t embedding
         t = timestep_embedding(t, self.hidden_size)
         t = self.embed_time(t)
+        t = self.time_ln(t)
 
         # h_flat + t
         h_flat_t = h_flat + t
