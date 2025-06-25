@@ -272,7 +272,7 @@ def experiment(
         wandb.init(
             name="end-to-end",
             group=group_name,
-            project='decision-transformer',
+            project='DT+FM',
             config=variant
         )
 
