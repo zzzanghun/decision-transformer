@@ -267,10 +267,6 @@ class DecisionTransformer(TrajectoryModel):
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        # 0~100 중 랜덤으로 시드 번호 선택
-        torch.seed()
-        seed = torch.randint(0, 101, (1,)).item()
-        torch.manual_seed(seed)
         noise = torch.randn_like(actions_flat).to(self.device)
         path_sample = self.path.sample(t=t, x_0=noise, x_1=actions_flat)
         x_t = path_sample.x_t
