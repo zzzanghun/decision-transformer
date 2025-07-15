@@ -179,10 +179,12 @@ if __name__ == "__main__":
     
     success = 0
     false = 0
+    final_episode_length = []
     for i in range(30):
         success_i, false_i, visited_states, total_episode_lengths = evaluate_episode_rtg(model, target_return=1)
         success += success_i
         false += false_i
+        final_episode_length.append(total_episode_lengths[-1])
         
         # 방문한 상태들을 카운트
         for state in visited_states:
@@ -191,7 +193,7 @@ if __name__ == "__main__":
 
     print(f"Success: {success}, False: {false}")
     print(f"Success rate: {success / (success + false)}")
-    print(f"Average episode length: {np.mean(total_episode_lengths)}")
+    print(f"Average episode length: {np.mean(final_episode_length)}")
 
     # 논문용 그래프 설정
     plt.rcParams.update({
