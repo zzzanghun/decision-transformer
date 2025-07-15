@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from decision_transformer.envs.straight_toy_env import LineSlipEnv
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from decision_transformer.models.decision_transformer_toy import DecisionTransformer
 
@@ -187,31 +189,59 @@ if __name__ == "__main__":
     print(f"Success: {success}, False: {false}")
     print(f"Success rate: {success / (success + false)}")
 
+    # 논문용 그래프 설정
+    plt.rcParams.update({
+        'font.size': 16,
+        'axes.titlesize': 20,
+        'axes.labelsize': 18,
+        'xtick.labelsize': 16,
+        'ytick.labelsize': 16,
+        'legend.fontsize': 16,
+        'figure.titlesize': 22
+    })
+
     # 히트맵 그리기
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(16, 10))
+    
+    # gridspec을 사용하여 높이 비율 조정 (바 차트: 히트맵 = 4:1)
+    gs = gridspec.GridSpec(2, 1, height_ratios=[4, 1], hspace=0.2)
     
     # 1D 히트맵 (바 차트)
-    plt.subplot(1, 2, 1)
-    plt.bar(range(101), state_counts)
-    plt.xlabel('State Position')
-    plt.ylabel('Visit Count')
-    plt.title('State Visit Counts (Bar Chart)')
-    plt.grid(True, alpha=0.3)
+    ax1 = plt.subplot(gs[0])
+    bars = plt.bar(range(101), state_counts, color='steelblue', alpha=0.8, edgecolor='black', linewidth=0.5)
+    plt.ylabel('Visit Count', fontsize=20)
+    plt.grid(True, alpha=0.3, linestyle='--')
     
-    # 2D 히트맵 (더 시각적)
-    plt.subplot(1, 2, 2)
+    # x축 레이블 제거 (아래쪽 히트맵에만 표시)
+    ax1.set_xticks(range(0, 101, 10))
+    ax1.set_xticklabels(range(0, 101, 10))
+    
+    # 2D 히트맵 (가로 바 형태)
+    ax2 = plt.subplot(gs[1])
     heatmap_data = state_counts.reshape(1, -1)
-    plt.imshow(heatmap_data, cmap='hot', interpolation='nearest', aspect='auto')
-    plt.colorbar(label='Visit Count')
-    plt.xlabel('State Position')
-    plt.title('State Visit Heatmap')
-    plt.yticks([])
+    im = plt.imshow(heatmap_data, cmap='coolwarm', interpolation='nearest', aspect='auto')
+    
+    # 컬러바를 히트맵 옆에 정확히 배치
+    divider = make_axes_locatable(ax2)
+    cax = divider.append_axes("right", size="2%", pad=0.1)
+    cbar = plt.colorbar(im, cax=cax, label='Visit Count')
+    cbar.ax.tick_params(labelsize=16)
+    cbar.set_label('Visit Count', fontsize=18)
+    
+    ax2.set_xlabel('State Position', fontsize=20)
+    ax2.set_yticks([])
     
     # x축 레이블 설정
-    plt.xticks(range(0, 101, 10), range(0, 101, 10))
+    ax2.set_xticks(range(0, 101, 10))
+    ax2.set_xticklabels(range(0, 101, 10))
+    
+    # 두 축의 가로 크기를 맞춤
+    pos1 = ax1.get_position()
+    pos2 = ax2.get_position()
+    ax2.set_position([pos1.x0, pos2.y0, pos1.width, pos2.height])
     
     plt.tight_layout()
-    plt.savefig('state_visit_heatmap.png', dpi=300, bbox_inches='tight')
+    plt.savefig('state_visit_heatmap.png', dpi=300, bbox_inches='tight', facecolor='white')
     plt.show()
     
     # 통계 정보 출력
