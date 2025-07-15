@@ -99,6 +99,8 @@ def evaluate_episode_rtg(
 
     sim_states = []
     visited_states = []  # 방문한 상태들을 저장
+    total_episode_lengths = []
+    episode_lengths = 0
 
     episode_return, episode_length = 0, 0
     for t in range(max_ep_len):
@@ -149,9 +151,10 @@ def evaluate_episode_rtg(
                 print("truncated", cur_state)
                 success = 0
                 false = 1
+            total_episode_lengths.append(t)
             break
 
-    return success, false, visited_states
+    return success, false, visited_states, total_episode_lengths
 
 if __name__ == "__main__":
     model = DecisionTransformer(
@@ -176,10 +179,12 @@ if __name__ == "__main__":
     
     success = 0
     false = 0
-    for i in range(10):
-        success_i, false_i, visited_states = evaluate_episode_rtg(model, target_return=1)
+    final_episode_length = []
+    for i in range(30):
+        success_i, false_i, visited_states, total_episode_lengths = evaluate_episode_rtg(model, target_return=1)
         success += success_i
         false += false_i
+        final_episode_length.append(total_episode_lengths[-1])
         
         # 방문한 상태들을 카운트
         for state in visited_states:
@@ -188,6 +193,7 @@ if __name__ == "__main__":
 
     print(f"Success: {success}, False: {false}")
     print(f"Success rate: {success / (success + false)}")
+    print(f"Average episode length: {np.mean(final_episode_length)}")
 
     # 논문용 그래프 설정
     plt.rcParams.update({
