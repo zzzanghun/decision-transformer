@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from decision_transformer.envs.straight_toy_env import LineSlipEnv
+import matplotlib.pyplot as plt
 
 from decision_transformer.models.decision_transformer_toy import DecisionTransformer
 
@@ -95,6 +96,7 @@ def evaluate_episode_rtg(
     timesteps = torch.tensor(0, device=device, dtype=torch.long).reshape(1, 1)
 
     sim_states = []
+    visited_states = []  # 방문한 상태들을 저장
 
     episode_return, episode_length = 0, 0
     for t in range(max_ep_len):
@@ -111,7 +113,7 @@ def evaluate_episode_rtg(
             timesteps.to(dtype=torch.long),
         )
 
-        print(action, "actions")
+        # print(action, "actions")
 
         actions[-1] = action
         action = action.detach().cpu().numpy()
@@ -122,6 +124,9 @@ def evaluate_episode_rtg(
         cur_state = torch.from_numpy(state).to(device=device).reshape(1, state_dim)
         states = torch.cat([states, cur_state], dim=0)
         rewards[-1] = reward_noise
+
+        # 방문한 상태를 저장
+        visited_states.append(int(state[0]))
 
         pred_return = target_return[0,-1] - reward
         target_return = torch.cat(
@@ -136,11 +141,15 @@ def evaluate_episode_rtg(
         if terminated or truncated:
             if terminated:
                 print("terminated")
+                success = 1
+                false = 0
             if truncated:
                 print("truncated", cur_state)
+                success = 0
+                false = 1
             break
 
-    return episode_return, episode_length
+    return success, false, visited_states
 
 if __name__ == "__main__":
     model = DecisionTransformer(
@@ -160,4 +169,55 @@ if __name__ == "__main__":
 
     model.load_state_dict(torch.load(f"/home/link/git/decision-transformer/model/fm/5000_1.696147e-01/3d_model.pth"), strict=False)
 
-    episode_return, episode_length = evaluate_episode_rtg(model, target_return=1)
+    # 0~100까지의 grid 카운트 배열 초기화
+    state_counts = np.zeros(101)  # 0~100까지 101개
+    
+    success = 0
+    false = 0
+    for i in range(10):
+        success_i, false_i, visited_states = evaluate_episode_rtg(model, target_return=1)
+        success += success_i
+        false += false_i
+        
+        # 방문한 상태들을 카운트
+        for state in visited_states:
+            if 0 <= state <= 100:  # 범위 체크
+                state_counts[state] += 1
+
+    print(f"Success: {success}, False: {false}")
+    print(f"Success rate: {success / (success + false)}")
+
+    # 히트맵 그리기
+    plt.figure(figsize=(12, 6))
+    
+    # 1D 히트맵 (바 차트)
+    plt.subplot(1, 2, 1)
+    plt.bar(range(101), state_counts)
+    plt.xlabel('State Position')
+    plt.ylabel('Visit Count')
+    plt.title('State Visit Counts (Bar Chart)')
+    plt.grid(True, alpha=0.3)
+    
+    # 2D 히트맵 (더 시각적)
+    plt.subplot(1, 2, 2)
+    heatmap_data = state_counts.reshape(1, -1)
+    plt.imshow(heatmap_data, cmap='hot', interpolation='nearest', aspect='auto')
+    plt.colorbar(label='Visit Count')
+    plt.xlabel('State Position')
+    plt.title('State Visit Heatmap')
+    plt.yticks([])
+    
+    # x축 레이블 설정
+    plt.xticks(range(0, 101, 10), range(0, 101, 10))
+    
+    plt.tight_layout()
+    plt.savefig('state_visit_heatmap.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    # 통계 정보 출력
+    print(f"\n=== 방문 통계 ===")
+    print(f"가장 많이 방문한 상태: {np.argmax(state_counts)} (방문 횟수: {np.max(state_counts)})")
+    print(f"가장 적게 방문한 상태: {np.argmin(state_counts)} (방문 횟수: {np.min(state_counts)})")
+    print(f"평균 방문 횟수: {np.mean(state_counts):.2f}")
+    print(f"방문하지 않은 상태 개수: {np.sum(state_counts == 0)}")
+    print(f"방문한 상태 개수: {np.sum(state_counts > 0)}")
