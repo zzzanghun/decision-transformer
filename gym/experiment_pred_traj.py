@@ -208,13 +208,15 @@ def experiment(
                     # if np.any(np.abs(coef) > 0.1):
                     #     save_traj = True
                     
-                    direction_vector = odom_data[:, :3]
-                    norm = np.linalg.norm(direction_vector)
-                    if norm != 0:
-                        direction_vector = direction_vector / norm
+                    # direction_vector = odom_data[:, :3]
+                    # norm = np.linalg.norm(direction_vector)
+                    # if norm != 0:
+                    #     direction_vector = direction_vector / norm
                     
-                    trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
+                    # trajectories[i]['observations'][j]['odom'][:, :3] = direction_vector
                     trajectories[i]['observations'][j]['odom'] = trajectories[i]['observations'][j]['odom'][:, obs_indices]
+                    trajectories[i]['observations'][j]['odom'][:, 3:6] *= 1.5
+                    trajectories[i]['observations'][j]['odom'][:, 6:9] *= 8.0
                     
                     
                     # coords를 활용해서 중앙에서 장애물과의 거리 계산
