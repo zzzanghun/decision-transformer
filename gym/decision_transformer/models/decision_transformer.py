@@ -130,7 +130,7 @@ class DecisionTransformer(TrajectoryModel):
                 nn.LayerNorm(hidden_size),
         )
         self.predict_velocity = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size),
+                nn.Linear(hidden_size*2, hidden_size),
                 nn.ELU(),
                 nn.Linear(hidden_size, hidden_size),
                 nn.ELU(),
@@ -289,6 +289,11 @@ class DecisionTransformer(TrajectoryModel):
 
         # adapt Film to x_t
         x_t = x_t * gamma + beta
+
+        state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+
+        # x_t와 state embeddings를 concat
+        x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)
