@@ -168,63 +168,63 @@ class DecisionTransformer(TrajectoryModel):
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
         x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
 
-        # # flat actions, x[:,1]
-        # actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
-        # h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        # h_flat = self.transformer_ln(h_flat)
+        # flat actions, x[:,1]
+        actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
+        h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        h_flat = self.transformer_ln(h_flat)
 
-        # # create t, x_t, u_t
-        # t = torch.rand(actions_flat.shape[0]).to('cuda')
+        # create t, x_t, u_t
+        t = torch.rand(actions_flat.shape[0]).to('cuda')
 
-        # noise = torch.randn_like(actions_flat).to('cuda')
-        # path_sample = self.path.sample(t=t, x_0=noise, x_1=actions_flat)
-        # x_t = path_sample.x_t
-        # u_t = path_sample.dx_t
+        noise = torch.randn_like(actions_flat).to('cuda')
+        path_sample = self.path.sample(t=t, x_0=noise, x_1=actions_flat)
+        x_t = path_sample.x_t
+        u_t = path_sample.dx_t
 
-        # # t embedding
-        # t = timestep_embedding(t, self.hidden_size)
-        # t = self.embed_time(t)
-        # t = self.time_ln(t)
+        # t embedding
+        t = timestep_embedding(t, self.hidden_size)
+        t = self.embed_time(t)
+        t = self.time_ln(t)
 
-        # # h_flat + t
-        # h_flat_t = h_flat + t
+        # h_flat + t
+        h_flat_t = h_flat + t
 
-        # # Film Gen
-        # gamma_beta = self.film_gen(h_flat_t)
-        # gamma, beta = gamma_beta.chunk(2, dim=-1)
+        # Film Gen
+        gamma_beta = self.film_gen(h_flat_t)
+        gamma, beta = gamma_beta.chunk(2, dim=-1)
 
-        # # x_t embedding
-        # x_t = self.embed_action_time(x_t)
+        # x_t embedding
+        x_t = self.embed_action_time(x_t)
 
-        # # adapt Film to x_t
-        # x_t = x_t * gamma + beta
+        # adapt Film to x_t
+        x_t = x_t * gamma + beta
 
-        # # predict u_t
-        # u_t_pred = self.predict_velocity(x_t)
+        # predict u_t
+        u_t_pred = self.predict_velocity(x_t)
 
-        # return u_t, u_t_pred
+        return u_t, u_t_pred
 
         # flat actions, x[:,1]
-        actions_last = actions[0, -1].unsqueeze(0)
-        h_last = x[:,1][0, -1].unsqueeze(0)
-        h_last = self.transformer_ln(h_last)
+        # actions_last = actions[0, -1].unsqueeze(0)
+        # h_last = x[:,1][0, -1].unsqueeze(0)
+        # h_last = self.transformer_ln(h_last)
 
-        # time_grid = torch.linspace(0.0, 1.0, steps=80, device=self.device)
-        time_grid = torch.tensor([0.0, 1.0], device='cuda')
-        # torch.manual_seed(52) # 52
-        torch.manual_seed(0) # 52
-        x_0 = torch.randn_like(actions_last).to('cuda')
+        # # time_grid = torch.linspace(0.0, 1.0, steps=80, device=self.device)
+        # time_grid = torch.tensor([0.0, 1.0], device='cuda')
+        # # torch.manual_seed(52) # 52
+        # torch.manual_seed(0) # 52
+        # x_0 = torch.randn_like(actions_last).to('cuda')
 
-        with torch.no_grad():
-            action_preds = self.solver.sample(
-                    time_grid=time_grid,
-                    x_init=x_0,
-                    return_intermediates=False,
-                    step_size=1/150,
-                    h_last = h_last
-                )
+        # with torch.no_grad():
+        #     action_preds = self.solver.sample(
+        #             time_grid=time_grid,
+        #             x_init=x_0,
+        #             return_intermediates=False,
+        #             step_size=1/150,
+        #             h_last = h_last
+        #         )
 
-        return action_preds
+        # return action_preds
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model
