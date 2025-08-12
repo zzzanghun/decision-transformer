@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import math
 import transformers
 from flow_matching.path import CondOTProbPath
@@ -147,11 +148,24 @@ class DecisionTransformer(TrajectoryModel):
         self.transformer_ln = nn.LayerNorm(hidden_size)
         self.film_gen = nn.Sequential(
                     nn.Linear(hidden_size, hidden_size),
-                    nn.ReLU(),
+                    nn.SiLU(),
                     nn.Linear(hidden_size, 2*hidden_size)
         )
+        nn.init.zeros_(self.film_gen[-1].weight) 
+        nn.init.zeros_(self.film_gen[-1].bias)
+        self.film_gen_t = nn.Sequential(
+                    nn.Linear(hidden_size, hidden_size),
+                    nn.SiLU(),
+                    nn.Linear(hidden_size, 2*hidden_size)
+        )
+        nn.init.zeros_(self.film_gen_t[-1].weight) 
+        nn.init.zeros_(self.film_gen_t[-1].bias)        
+        self.alpha_s_raw = nn.Parameter(torch.tensor(0.7))
         self.time_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
+
+    def alpha_s_out(self):
+        return F.softplus(self.alpha_s_raw) + 1.0
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
         batch_size, seq_length = actions.shape[0], actions.shape[1]
@@ -278,7 +292,10 @@ class DecisionTransformer(TrajectoryModel):
         t = self.time_ln(t)
 
         # h_flat + t
-        h_flat_t = h_flat + t
+        # h_flat_t = h_flat + t
+        gamma_beta_t = self.film_gen_t(t)
+        gamma_t, beta_t = gamma_beta_t.chunk(2, dim=-1)
+        h_flat_t = h_flat * (1 + gamma_t) + beta_t
 
         # Film Gen
         gamma_beta = self.film_gen(h_flat_t)
@@ -288,11 +305,12 @@ class DecisionTransformer(TrajectoryModel):
         x_t = self.embed_action_time(x_t)
 
         # adapt Film to x_t
-        x_t = x_t * gamma + beta
+        x_t = x_t * (1 + gamma) + beta
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
-        # x_t와 state embeddings를 concat
+        state_embeddings = self.alpha_s_out() * state_embeddings
+
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
         # predict u_t
