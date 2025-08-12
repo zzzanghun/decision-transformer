@@ -161,7 +161,6 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen_t[-1].weight) 
         nn.init.zeros_(self.film_gen_t[-1].bias)        
         self.alpha_s_raw = nn.Parameter(torch.tensor(0.7))
-        self.time_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
     def alpha_s_out(self):
@@ -289,7 +288,6 @@ class DecisionTransformer(TrajectoryModel):
         # t embedding
         t = timestep_embedding(t, self.hidden_size)
         t = self.embed_time(t)
-        t = self.time_ln(t)
 
         # h_flat + t
         # h_flat_t = h_flat + t
