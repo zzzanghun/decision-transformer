@@ -98,10 +98,12 @@ class DecisionTransformer(TrajectoryModel):
                     # ME.MinkowskiBatchNorm(128),
                     ME.MinkowskiReLU(inplace=True),
                 )
+                self.drop_chlate = (ME.MinkowskiDropout(0.1))
                 # Global pooling 추가
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.norm_global_pool = nn.LayerNorm(128)
+                self.drop_dense = nn.Dropout(0.1)
                 self.fc_enc = nn.Linear(128, 128)
             self.embed_odom = nn.Sequential(
                 nn.Linear(odom_dim, 4 * self.before_concat_hidden_size),
@@ -207,10 +209,13 @@ class DecisionTransformer(TrajectoryModel):
                 
                 # 인코더 네트워크 통과
                 x = self.encoder(sparse_tensor)
+                x = self.drop_chlate(x)
                 
                 # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환
                 x = self.global_pool(x)
                 x = self.norm_global_pool(x.F)
+                x = F.gelu(x)     
+                x = self.drop_dense(x)
                 # 최종 임베딩 생성
                 embeddings = self.fc_enc(x)
 
