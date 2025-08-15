@@ -390,7 +390,7 @@ def experiment(
             a[-1] = np.concatenate([np.ones((1, max_len - tlen, act_dim)) * -10., a[-1]], axis=1)
             r[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), r[-1]], axis=1)
             d[-1] = np.concatenate([np.ones((1, max_len - tlen)) * 2, d[-1]], axis=1)
-            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / max_len
+            rtg[-1] = np.concatenate([np.zeros((1, max_len - tlen, 1)), rtg[-1]], axis=1) / 10
             timesteps[-1] = np.concatenate([np.zeros((1, max_len - tlen)), timesteps[-1]], axis=1)
             mask.append(np.concatenate([np.zeros((1, max_len - tlen)), np.ones((1, tlen))], axis=1))
         # s = torch.from_numpy(np.concatenate(s, axis=0)).to(dtype=torch.float32, device=device)
@@ -571,13 +571,13 @@ if __name__ == '__main__':
     parser.add_argument('--env', type=str, default='ego-planner')
     parser.add_argument('--dataset', type=str, default='medium')  # medium, medium-replay, medium-expert, expert
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
-    parser.add_argument('--K', type=int, default=10)
+    parser.add_argument('--K', type=int, default=5)
     parser.add_argument('--pct_traj', type=float, default=1.)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
-    parser.add_argument('--embed_dim', type=int, default=256)
+    parser.add_argument('--embed_dim', type=int, default=768)
     parser.add_argument('--n_layer', type=int, default=15)
-    parser.add_argument('--n_head', type=int, default=4)
+    parser.add_argument('--n_head', type=int, default=12)
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)

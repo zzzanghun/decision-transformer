@@ -60,6 +60,7 @@ class DecisionTransformer(TrajectoryModel):
             n_embd=hidden_size,
             **kwargs
         )
+
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.odom_dim = odom_dim
         self.time_embedding = time_embedding
@@ -91,10 +92,14 @@ class DecisionTransformer(TrajectoryModel):
                     ME.MinkowskiReLU(inplace=True),
 
                     ME.MinkowskiConvolution(32, 64, kernel_size=3, stride=2, dimension=3),
-                    # ME.MinkowskiBatchNorm(64),
+                    # ME.MinkowskiBatchNorm(32),
                     ME.MinkowskiReLU(inplace=True),
 
                     ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=3),
+                    # ME.MinkowskiBatchNorm(64),
+                    ME.MinkowskiReLU(inplace=True),
+
+                    ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=1, dimension=3),
                     # ME.MinkowskiBatchNorm(128),
                     ME.MinkowskiReLU(inplace=True),
                 )
@@ -102,14 +107,14 @@ class DecisionTransformer(TrajectoryModel):
                 # Global pooling 추가
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
-                self.norm_global_pool = nn.LayerNorm(128)
+                self.norm_global_pool = nn.LayerNorm(256)
                 self.drop_dense = nn.Dropout(0.1)
-                self.fc_enc = nn.Linear(128, 128)
+                self.fc_enc = nn.Linear(256, self.before_concat_hidden_size)
             self.embed_odom = nn.Sequential(
-                nn.Linear(odom_dim, 4 * self.before_concat_hidden_size),
+                nn.Linear(odom_dim, 2 * self.before_concat_hidden_size),
                 nn.ReLU(),
-                nn.LayerNorm(4 * self.before_concat_hidden_size),   # <-- 여기
-                nn.Linear(4 * self.before_concat_hidden_size, self.before_concat_hidden_size),
+                nn.LayerNorm(2 * self.before_concat_hidden_size),   # <-- 여기
+                nn.Linear(2 * self.before_concat_hidden_size, self.before_concat_hidden_size),
             )
             self.norm_odom = nn.LayerNorm(self.before_concat_hidden_size)
             self.norm_obstacles = nn.LayerNorm(self.before_concat_hidden_size)
