@@ -22,14 +22,16 @@ class Trainer:
     def train_iteration(self, num_steps, iter_num=0, print_logs=False):
 
         train_losses = []
+        grad_norms = []
         logs = dict()
 
         train_start = time.time()
 
         self.model.train()
         for _ in range(num_steps):
-            train_loss = self.train_step()
+            train_loss, grad_norm = self.train_step()
             train_losses.append(train_loss)
+            grad_norms.append(grad_norm)
             if self.scheduler is not None:
                 self.scheduler.step()
 
@@ -47,7 +49,8 @@ class Trainer:
         # logs['time/evaluation'] = time.time() - eval_start
         logs['training/train_loss_mean'] = np.mean(train_losses)
         logs['training/train_loss_std'] = np.std(train_losses)
-
+        logs['training/grad_norm_mean'] = np.mean(grad_norms)
+        
         for k in self.diagnostics:
             logs[k] = self.diagnostics[k]
 
