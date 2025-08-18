@@ -12,7 +12,7 @@ def evaluate_episode(
         act_dim,
         model,
         max_ep_len=1000,
-        device='cuda',
+        device='cpu',
         target_return=None,
         mode='normal',
         state_mean=0.,
@@ -72,7 +72,7 @@ def evaluate_episode(
 def evaluate_episode_rtg(
         model,
         max_ep_len=1000,
-        device='cuda',
+        device='cpu',
         target_return=None,
         mode='noise',
     ):
@@ -172,7 +172,7 @@ if __name__ == "__main__":
         attn_pdrop=0.0,
     )
 
-    model.load_state_dict(torch.load(f"/home/link/git/decision-transformer/model/3d_end-to-end/5000_2.686392e-03/3d_model.pth"), strict=True)
+    model.load_state_dict(torch.load(f"/workspace/model/3d_end-to-end/5000_8.154801e-03/only_dt_model.pth"), strict=True)
 
     # 0~100까지의 grid 카운트 배열 초기화
     state_counts = np.zeros(101)  # 0~100까지 101개
@@ -206,6 +206,7 @@ if __name__ == "__main__":
         'figure.titlesize': 22
     })
 
+    YMAX_FIXED = 200
     # 히트맵 그리기
     plt.figure(figsize=(16, 10))
     
@@ -214,18 +215,23 @@ if __name__ == "__main__":
     
     # 1D 히트맵 (바 차트)
     ax1 = plt.subplot(gs[0])
-    bars = plt.bar(range(101), state_counts, color='steelblue', alpha=0.8, edgecolor='black', linewidth=0.5)
-    plt.ylabel('Visit Count', fontsize=20)
-    plt.grid(True, alpha=0.3, linestyle='--')
+    ax1.bar(range(101), state_counts, color='steelblue', alpha=0.8, edgecolor='black', linewidth=0.5)
+    ax1.set_ylabel('Visit Count', fontsize=20)
+    ax1.grid(True, alpha=0.3, linestyle='--')
+
     
     # x축 레이블 제거 (아래쪽 히트맵에만 표시)
     ax1.set_xticks(range(0, 101, 10))
     ax1.set_xticklabels(range(0, 101, 10))
     
+    ax1.set_ylim(0, YMAX_FIXED)
+    ax1.set_yticks(list(range(0, YMAX_FIXED + 1, 25)))
+    ax1.set_yticklabels([str(t) for t in range(0, YMAX_FIXED + 1, 25)])
+
     # 2D 히트맵 (가로 바 형태)
     ax2 = plt.subplot(gs[1])
     heatmap_data = state_counts.reshape(1, -1)
-    im = plt.imshow(heatmap_data, cmap='coolwarm', interpolation='nearest', aspect='auto')
+    im = ax2.imshow(heatmap_data, cmap='coolwarm', interpolation='nearest', aspect='auto', vmin=0, vmax=YMAX_FIXED)
     
     # 컬러바를 히트맵 옆에 정확히 배치
     divider = make_axes_locatable(ax2)
@@ -234,6 +240,9 @@ if __name__ == "__main__":
     cbar.ax.tick_params(labelsize=16)
     cbar.set_label('Visit Count', fontsize=18)
     
+    cbar.set_ticks([0, 100, YMAX_FIXED])
+    cbar.ax.tick_params(labelsize=16)
+
     ax2.set_xlabel('State Position', fontsize=20)
     ax2.set_yticks([])
     
