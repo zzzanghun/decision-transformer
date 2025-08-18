@@ -6,7 +6,7 @@ from decision_transformer.training.trainer import Trainer
 
 class SequenceTrainer(Trainer):
 
-    def train_step(self):
+    def train_step(self, iter_num):
         self.train_num += 1
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(self.batch_size)
         action_target = torch.clone(actions)
@@ -36,7 +36,10 @@ class SequenceTrainer(Trainer):
 
         self.optimizer.zero_grad()
         loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        if iter_num > 500:
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+        else:
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 10.0)
         self.optimizer.step()
 
         # with torch.no_grad():

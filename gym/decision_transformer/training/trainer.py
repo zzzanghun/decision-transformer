@@ -29,7 +29,7 @@ class Trainer:
 
         self.model.train()
         for _ in range(num_steps):
-            train_loss, grad_norm = self.train_step()
+            train_loss, grad_norm = self.train_step(iter_num)
             train_losses.append(train_loss)
             grad_norms.append(grad_norm)
             if self.scheduler is not None:
