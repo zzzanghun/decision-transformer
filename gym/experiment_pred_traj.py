@@ -25,6 +25,37 @@ PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
 print(PROJECT_PATH)
 
+def param_groups(model, wd: float):
+    decay, no_decay = [], []
+    for n, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+
+        nl = n.lower()
+
+        # 1) bias 또는 1D 파라미터(대부분 norm scale/bias, 게이트 스칼라 등)
+        if n.endswith('bias') or p.dim() == 1:
+            no_decay.append(p)
+            continue
+
+        # 2) 정규화 계열은 모두 no-decay
+        if any(k in nl for k in ['norm', 'layernorm', 'groupnorm', 'bn', 'batchnorm']):
+            no_decay.append(p)
+            continue
+
+        # 3) 포지셔널 임베딩(학습형)은 보통 no-decay
+        if any(k in nl for k in ['pos_embed', 'position_embedding', 'positional_embedding', 'position_embeddings']):
+            no_decay.append(p)
+            continue
+
+        # 그 외(Conv/Linear weight 등)는 decay
+        decay.append(p)
+
+    return [
+        {'params': decay, 'weight_decay': wd},
+        {'params': no_decay, 'weight_decay': 0.0},
+    ]
+
 def discount_cumsum(x, gamma):
     discount_cumsum = np.zeros_like(x)
     discount_cumsum[-1] = x[-1]
@@ -506,9 +537,8 @@ def experiment(
 
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=variant['learning_rate'],
-        weight_decay=variant['weight_decay'],
+        param_groups(model, wd=variant['weight_decay']),
+        lr=variant['learning_rate'], betas=(0.9, 0.95), eps=1e-8
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
@@ -581,7 +611,7 @@ if __name__ == '__main__':
     parser.add_argument('--activation_function', type=str, default='relu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0.03)
     parser.add_argument('--warmup_steps', type=int, default=10000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)

@@ -133,45 +133,31 @@ class DecisionTransformer(TrajectoryModel):
 
         self.embed_action_time = nn.Sequential(
                 nn.Linear(self.act_dim, hidden_size),
-                nn.ReLU(),
+                nn.GELU(),
                 nn.Linear(hidden_size, hidden_size),
                 nn.LayerNorm(hidden_size),
         )
         self.predict_velocity = nn.Sequential(
                 nn.Linear(hidden_size*2, hidden_size),
-                nn.ELU(),
-                nn.Linear(hidden_size, hidden_size),
-                nn.ELU(),
-                nn.Linear(hidden_size, hidden_size),
-                nn.ELU(),
+                nn.GELU(),
                 nn.Linear(hidden_size, self.act_dim),
         )
         self.embed_time = nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
-                nn.SiLU(),
+                nn.GELU(),
                 nn.Linear(hidden_size, hidden_size),
                 nn.LayerNorm(hidden_size),
         )
         self.transformer_ln = nn.LayerNorm(hidden_size)
         self.film_gen = nn.Sequential(
-                    nn.Linear(hidden_size, hidden_size),
-                    nn.SiLU(),
-                    nn.Linear(hidden_size, 2*hidden_size)
+                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(2*hidden_size, 2*hidden_size)
         )
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
-        self.film_gen_t = nn.Sequential(
-                    nn.Linear(hidden_size, hidden_size),
-                    nn.SiLU(),
-                    nn.Linear(hidden_size, 2*hidden_size)
-        )
-        nn.init.zeros_(self.film_gen_t[-1].weight) 
-        nn.init.zeros_(self.film_gen_t[-1].bias)        
-        self.alpha_s_raw = nn.Parameter(torch.tensor(0.7))
+        self.state_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
-
-    def alpha_s_out(self):
-        return F.softplus(self.alpha_s_raw) + 1.0
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
         batch_size, seq_length = actions.shape[0], actions.shape[1]
@@ -300,10 +286,7 @@ class DecisionTransformer(TrajectoryModel):
         t = self.embed_time(t)
 
         # h_flat + t
-        # h_flat_t = h_flat + t
-        gamma_beta_t = self.film_gen_t(t)
-        gamma_t, beta_t = gamma_beta_t.chunk(2, dim=-1)
-        h_flat_t = h_flat * (1 + gamma_t) + beta_t
+        h_flat_t = torch.cat([h_flat, t], dim=-1)
 
         # Film Gen
         gamma_beta = self.film_gen(h_flat_t)
@@ -317,7 +300,7 @@ class DecisionTransformer(TrajectoryModel):
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
-        state_embeddings = self.alpha_s_out() * state_embeddings
+        state_embeddings = self.state_ln(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
