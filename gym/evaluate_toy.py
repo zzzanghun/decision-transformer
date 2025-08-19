@@ -180,7 +180,7 @@ if __name__ == "__main__":
     success = 0
     false = 0
     final_episode_length = []
-    iter_num = 100
+    iter_num = 30
     for i in range(iter_num):
         success_i, false_i, visited_states, total_episode_lengths = evaluate_episode_rtg(model, target_return=1)
         success += success_i
