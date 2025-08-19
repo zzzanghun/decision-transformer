@@ -112,8 +112,7 @@ class DecisionTransformer(TrajectoryModel):
                 self.fc_enc = nn.Linear(256, self.before_concat_hidden_size)
             self.embed_odom = nn.Sequential(
                 nn.Linear(odom_dim, 2 * self.before_concat_hidden_size),
-                nn.ReLU(),
-                nn.LayerNorm(2 * self.before_concat_hidden_size),   # <-- 여기
+                nn.GELU(),
                 nn.Linear(2 * self.before_concat_hidden_size, self.before_concat_hidden_size),
             )
             self.norm_odom = nn.LayerNorm(self.before_concat_hidden_size)

@@ -179,8 +179,9 @@ if __name__ == "__main__":
     
     success = 0
     false = 0
+    iter_num = 30
     final_episode_length = []
-    for i in range(30):
+    for i in range(iter_num):
         success_i, false_i, visited_states, total_episode_lengths = evaluate_episode_rtg(model, target_return=1)
         success += success_i
         false += false_i
@@ -190,6 +191,7 @@ if __name__ == "__main__":
         for state in visited_states:
             if 0 <= state <= 100:  # 범위 체크
                 state_counts[state] += 1
+    state_counts[0] += iter_num
 
     print(f"Success: {success}, False: {false}")
     print(f"Success rate: {success / (success + false)}")
