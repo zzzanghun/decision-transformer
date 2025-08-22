@@ -214,6 +214,7 @@ def experiment(
         # Define the indices of the actions to be used
         action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
         obs_indices = [0, 1, 2, 3, 4, 5, 9, 10, 11]
+        action_norm = []
         sampled_traj = []
         save_traj = False
         del_traj = False
@@ -225,11 +226,8 @@ def experiment(
                 trajectories[i]['observations'] = convert_observations_to_dict_format(trajectories[i]['observations'], device)
                 save_traj = True
                 for j in range(len(trajectories[i]['actions'])):
-                    coef = trajectories[i]['actions'][j] / action_norm
-                    # Discretize to 0.001 intervals
-                    # coef = np.round(coef / 0.001) * 0.001
-                    # Assign back
-                    trajectories[i]['actions'][j] = coef
+                    coef = trajectories[i]['actions'][j]
+                    action_norm.append(coef)
                     
                     # 새 형식으로 접근
                     odom_data = trajectories[i]['observations'][j]['odom']
@@ -282,6 +280,20 @@ def experiment(
             print(type(trajectories))
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
+
+    action_norm = np.array(action_norm)
+    action_norm_torch = torch.from_numpy(action_norm)
+    action_norm_mu = action_norm_torch.mean(dim=0) 
+    action_norm_std = action_norm_torch.std(dim=0, unbiased=False).clamp_min(1e-6)
+
+    action_norm_mu = action_norm_mu.cpu().numpy()
+    action_norm_std = action_norm_std.cpu().numpy()
+
+    print(action_norm_mu, action_norm_std, "action_norm_mu, action_norm_std")
+
+    for i in range(len(trajectories)):
+        for j in range(len(trajectories[i]['actions'])):
+            trajectories[i]['actions'][j] = (trajectories[i]['actions'][j] - action_norm_mu) / action_norm_std
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
