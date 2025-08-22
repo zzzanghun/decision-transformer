@@ -624,7 +624,7 @@ if __name__ == '__main__':
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0.03)
-    parser.add_argument('--warmup_steps', type=int, default=10000)
+    parser.add_argument('--warmup_steps', type=int, default=50)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
     parser.add_argument('--num_steps_per_iter', type=int, default=100)
