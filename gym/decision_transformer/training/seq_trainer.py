@@ -36,7 +36,7 @@ class SequenceTrainer(Trainer):
 
         self.optimizer.zero_grad()
         loss.backward()
-        if iter_num > 500:
+        if iter_num > 50:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 10.0)
