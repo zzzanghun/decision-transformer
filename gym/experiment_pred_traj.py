@@ -215,6 +215,7 @@ def experiment(
         action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
         obs_indices = [0, 1, 2, 3, 4, 5, 9, 10, 11]
         action_norm = []
+        odom_norm = []
         sampled_traj = []
         save_traj = False
         del_traj = False
@@ -246,6 +247,7 @@ def experiment(
                     trajectories[i]['observations'][j]['odom'] = trajectories[i]['observations'][j]['odom'][:, obs_indices]
                     trajectories[i]['observations'][j]['odom'][:, 3:6] *= 1.5
                     trajectories[i]['observations'][j]['odom'][:, 6:9] *= 8.0
+                    odom_norm.append(trajectories[i]['observations'][j]['odom'])
                     
                     
                     # coords를 활용해서 중앙에서 장애물과의 거리 계산
@@ -291,9 +293,17 @@ def experiment(
 
     print(action_norm_mu, action_norm_std, "action_norm_mu, action_norm_std")
 
+    odom_norm = np.array(odom_norm)
+    odom_norm_torch = torch.from_numpy(odom_norm)
+    odom_norm_mu = odom_norm_torch.mean(dim=0)
+    odom_norm_std = odom_norm_torch.std(dim=0, unbiased=False).clamp_min(1e-6)
+
+    print(odom_norm_mu, odom_norm_std, "odom_norm_mu, odom_norm_std")
+
     for i in range(len(trajectories)):
         for j in range(len(trajectories[i]['actions'])):
             trajectories[i]['actions'][j] = (trajectories[i]['actions'][j] - action_norm_mu) / action_norm_std
+            trajectories[i]['observations'][j]['odom'] = (trajectories[i]['observations'][j]['odom'] - odom_norm_mu) / odom_norm_std
 
     # save all path information into separate lists
     mode = variant.get('mode', 'normal')
