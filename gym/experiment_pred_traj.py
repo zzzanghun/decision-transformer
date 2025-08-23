@@ -633,7 +633,7 @@ if __name__ == '__main__':
     parser.add_argument('--embed_dim', type=int, default=768)
     parser.add_argument('--n_layer', type=int, default=15)
     parser.add_argument('--n_head', type=int, default=12)
-    parser.add_argument('--activation_function', type=str, default='relu')
+    parser.add_argument('--activation_function', type=str, default='gelu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0.03)
