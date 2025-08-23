@@ -149,7 +149,7 @@ class DecisionTransformer(TrajectoryModel):
         )
         self.transformer_ln = nn.LayerNorm(hidden_size)
         self.film_gen = nn.Sequential(
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(2*hidden_size + 2*self.act_dim, 2*hidden_size),
                     nn.GELU(),
                     nn.Linear(2*hidden_size, 2*hidden_size)
         )
@@ -292,7 +292,7 @@ class DecisionTransformer(TrajectoryModel):
         t = self.embed_time(t)
 
         # h_flat + t
-        h_flat_t = torch.cat([h_flat, t], dim=-1)
+        h_flat_t = torch.cat([h_flat, t, mu, 0.5 * logvar], dim=-1)
 
         # Film Gen
         gamma_beta = self.film_gen(h_flat_t)
