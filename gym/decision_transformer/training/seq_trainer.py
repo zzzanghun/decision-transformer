@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from decision_transformer.training.trainer import Trainer
 
@@ -11,7 +12,7 @@ class SequenceTrainer(Trainer):
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(self.batch_size)
         action_target = torch.clone(actions)
 
-        u_t, u_t_pred = self.model.forward(
+        u_t, u_t_pred, mu, logvar = self.model.forward(
             states, actions, rewards, rtg[:,:-1], timesteps, attention_mask=attention_mask, odom=odom
         )
 
@@ -26,6 +27,11 @@ class SequenceTrainer(Trainer):
             None, u_t_pred, None,
             None, u_t, None,
         )
+
+        kl = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1.0, dim=-1)
+        kl_loss = kl.mean()
+
+        loss = loss + 0.5 * kl_loss
 
         # loss_for_prev_pred = self.loss_fn(
         #     None, action_preds_for_prev, None,
@@ -48,4 +54,4 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item()
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item()

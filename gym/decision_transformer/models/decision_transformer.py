@@ -155,6 +155,11 @@ class DecisionTransformer(TrajectoryModel):
         )
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
+
+        self.mu = nn.Linear(hidden_size, self.act_dim)
+        self.logvar = nn.Linear(hidden_size, self.act_dim)
+        nn.init.constant_(self.logvar.bias, -2.0)
+
         self.state_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
@@ -275,10 +280,12 @@ class DecisionTransformer(TrajectoryModel):
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        noise = torch.randn_like(actions_flat).to(self.device)
-        path_sample = self.path.sample(t=t, x_0=noise, x_1=actions_flat)
+        # noise = torch.randn_like(actions_flat).to(self.device)
+        x0, mu, logvar = self.x0_reparameterize(h_flat)
+
+        path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t
-        u_t = path_sample.dx_t
+        u_t = path_sample.dx_t.detach()
 
         # t embedding
         t = timestep_embedding(t, self.hidden_size)
@@ -306,7 +313,14 @@ class DecisionTransformer(TrajectoryModel):
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)
 
-        return u_t, u_t_pred
+        return u_t, u_t_pred, mu, logvar
+
+    def x0_reparameterize(self, h):
+        mu = self.mu(h)
+        logvar = self.logvar(h).clamp(-5.0, 5.0)
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + std * eps, mu, logvar
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model
