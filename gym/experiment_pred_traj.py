@@ -298,6 +298,9 @@ def experiment(
     odom_norm_mu = odom_norm_torch.mean(dim=0)
     odom_norm_std = odom_norm_torch.std(dim=0, unbiased=False).clamp_min(1e-6)
 
+    odom_norm_mu = odom_norm_mu.cpu().numpy()
+    odom_norm_std = odom_norm_std.cpu().numpy()    
+
     print(odom_norm_mu, odom_norm_std, "odom_norm_mu, odom_norm_std")
 
     for i in range(len(trajectories)):
