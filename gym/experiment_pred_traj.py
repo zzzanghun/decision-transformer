@@ -563,7 +563,7 @@ def experiment(
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
         param_groups(model, wd=variant['weight_decay']),
-        lr=variant['learning_rate'], betas=(0.9, 0.95), eps=1e-8
+        lr=variant['learning_rate'], betas=(0.9, 0.999), eps=1e-8
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
