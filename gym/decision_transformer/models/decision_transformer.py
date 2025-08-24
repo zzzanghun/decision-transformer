@@ -319,7 +319,7 @@ class DecisionTransformer(TrajectoryModel):
         mu = self.mu(h)
         logvar = self.logvar(h).clamp(-5.0, 5.0)
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
+        eps = torch.randn_like(std) * 0.1
         return mu + std * eps, mu, logvar
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
