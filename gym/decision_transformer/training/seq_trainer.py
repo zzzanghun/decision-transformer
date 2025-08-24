@@ -31,7 +31,7 @@ class SequenceTrainer(Trainer):
         kl = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1.0, dim=-1)
         kl_loss = kl.mean()
 
-        beta_target = 0.01
+        beta_target = 0.0005
         warmup_steps = 10000
         beta_kl = min(beta_target, beta_target * (self.train_num + 1) / warmup_steps)
 
