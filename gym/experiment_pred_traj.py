@@ -205,11 +205,22 @@ def experiment(
         reward_radius = 20
         obstacle_dim = (100, 100, 10)
         trajectories = []
-        # dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/ego-3d-data_1.pkl'
-        dataset_path = f'{PROJECT_PATH}/gym/data/3d/100x100/medial-3d-data_1.pkl'
-        with open(dataset_path, 'rb') as f:
-            trajectories += pickle.load(f)
-
+        for i in range(1, 52): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/gazebo/ego-grid-3/ego-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories += pickle.load(f) 
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/ego_3d_400_cylinder/ego-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories += pickle.load(f)
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/ego_3d_500_cylinder/ego-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories += pickle.load(f)
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/ego_3d_600_cylinder/ego-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories += pickle.load(f)   
 
         # Define the indices of the actions to be used
         action_indices = [0, 1, 2, 6, 7, 8, 12, 13, 14]
@@ -230,7 +241,7 @@ def experiment(
                     coef = trajectories[i]['actions'][j]
                     action_norm.append(coef)
                     
-                    # 새 형식으로 접근
+                    # ?? ???????? ????
                     odom_data = trajectories[i]['observations'][j]['odom']
                     coords = trajectories[i]['observations'][j]['voxel']['coords']
                     feats = trajectories[i]['observations'][j]['voxel']['feats']
@@ -249,8 +260,6 @@ def experiment(
                     trajectories[i]['observations'][j]['odom'][:, 6:9] *= 8.0
                     odom_norm.append(trajectories[i]['observations'][j]['odom'])
                     
-                    
-                    # coords를 활용해서 중앙에서 장애물과의 거리 계산
                     min_distance, reward = calculate_distance_from_center_using_coords(
                         coords, 
                         center_coord=(50, 50, 5), 
@@ -262,13 +271,78 @@ def experiment(
                         # print(trajectories[i]['rewards'][j-1], "trajectories[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories
-                if save_traj:
-                    sampled_traj.append(trajectories[i])
-            all_rewards = [reward for trajectory in sampled_traj for reward in trajectory['rewards']]
+            all_rewards = [reward for trajectory in trajectories for reward in trajectory['rewards']]
             mean_reward = np.mean(all_rewards)
             print(f"Mean reward: {mean_reward}")
-            trajectories = sampled_traj
         elif type(trajectories[0]['observations']) == list:
+            print("data already preprocessed")
+        else:
+            raise NotImplementedError
+
+        trajectories_2 = []
+        for i in range(1, 52): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/gazebo/medial-grid-3_2/medial-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories_2 += pickle.load(f) 
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/medial_3d_400_cylinder/medial-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories_2 += pickle.load(f) 
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/medial_3d_500_cylinder/medial-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories_2 += pickle.load(f) 
+        for i in range(1, 20): 
+            dataset_path = f'/home/link/git/decision-transformer/gym/data/3d/swarm-playground/medial_3d_600_cylinder/medial-3d-data_{i}.pkl' 
+            with open(dataset_path, 'rb') as f: 
+                trajectories_2 += pickle.load(f)      
+
+        if type(trajectories_2[0]['observations']) == np.ndarray:
+            for i in range(len(trajectories_2)):
+                trajectories_2[i]['actions'] = trajectories_2[i]['actions'][:, action_indices]
+                trajectories_2[i]['rewards'] = np.zeros(len(trajectories_2[i]['actions']), dtype=float)
+                trajectories_2[i]['observations'] = convert_observations_to_dict_format(trajectories_2[i]['observations'], device)
+                save_traj = True
+                for j in range(len(trajectories_2[i]['actions'])):
+                    coef = trajectories_2[i]['actions'][j]
+                    action_norm.append(coef)
+                    
+                    # ?? ???????? ????
+                    odom_data = trajectories_2[i]['observations'][j]['odom']
+                    coords = trajectories_2[i]['observations'][j]['voxel']['coords']
+                    feats = trajectories_2[i]['observations'][j]['voxel']['feats']
+                    
+                    # if np.any(np.abs(coef) > 0.1):
+                    #     save_traj = True
+                    
+                    # direction_vector = odom_data[:, :3]
+                    # norm = np.linalg.norm(direction_vector)
+                    # if norm != 0:
+                    #     direction_vector = direction_vector / norm
+                    
+                    # trajectories_2[i]['observations'][j]['odom'][:, :3] = direction_vector
+                    trajectories_2[i]['observations'][j]['odom'] = trajectories_2[i]['observations'][j]['odom'][:, obs_indices]
+                    trajectories_2[i]['observations'][j]['odom'][:, 3:6] *= 1.5
+                    trajectories_2[i]['observations'][j]['odom'][:, 6:9] *= 8.0
+                    odom_norm.append(trajectories_2[i]['observations'][j]['odom'])
+                    
+                    
+                    # coords?? ???????? ???????? ?????????? ???? ????
+                    min_distance, reward = calculate_distance_from_center_using_coords(
+                        coords, 
+                        center_coord=(50, 50, 5), 
+                        reward_radius=reward_radius
+                    )
+                    
+                    if j > 0:
+                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.5
+                        # print(trajectories_2[i]['rewards'][j-1], "trajectories_2[i]['rewards'][j-1]")
+                # Set the reward of the last step to 0
+                # Calculate the mean of all rewards in the trajectories_2
+            all_rewards = [reward for trajectory in trajectories_2 for reward in trajectory['rewards']]
+            mean_reward = np.mean(all_rewards)
+            print(f"Mean reward: {mean_reward}")
+        elif type(trajectories_2[0]['observations']) == list:
             print("data already preprocessed")
         else:
             raise NotImplementedError
@@ -280,6 +354,8 @@ def experiment(
         with open(dataset_path, 'rb') as f:
             trajectories = pickle.load(f)
             print(type(trajectories))
+
+    trajectories = trajectories + trajectories_2
 
     print(len(trajectories), "#!@!@#@!#@!#@!#@#!!@#@!#@!#@!#!@#@!#!@#")
 

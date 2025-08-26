@@ -71,7 +71,11 @@ class DecisionTransformer(TrajectoryModel):
         self.transformer = GPT2Model(config)
 
         self.embed_timestep = nn.Embedding(20, hidden_size)
-        self.embed_return = torch.nn.Linear(1, hidden_size)
+        self.embed_return = nn.Sequential(
+                nn.Linear(1, hidden_size),
+                nn.GELU(),
+                nn.Linear(hidden_size, hidden_size),
+            )
 
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
@@ -156,11 +160,10 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
 
-        self.mu = nn.Linear(hidden_size, self.act_dim)
-        self.logvar = nn.Linear(hidden_size, self.act_dim)
-        nn.init.constant_(self.logvar.bias, -2.0)
+        self.mu = nn.Linear(2*hidden_size, self.act_dim)
 
         self.state_ln = nn.LayerNorm(hidden_size)
+        self.return_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
@@ -274,6 +277,8 @@ class DecisionTransformer(TrajectoryModel):
 
         # flat actions, x[:,1]
         actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
+        returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        returns_embeddings = self.return_ln(returns_embeddings)
         h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
         h_flat = self.transformer_ln(h_flat)
 
@@ -281,7 +286,7 @@ class DecisionTransformer(TrajectoryModel):
         t = torch.rand(actions_flat.shape[0]).to(self.device)
 
         # noise = torch.randn_like(actions_flat).to(self.device)
-        x0, mu, logvar = self.x0_reparameterize(h_flat)
+        x0 = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
 
         path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t
@@ -313,14 +318,11 @@ class DecisionTransformer(TrajectoryModel):
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)
 
-        return u_t, u_t_pred, mu, logvar
+        return u_t, u_t_pred, x0
 
     def x0_reparameterize(self, h):
         mu = self.mu(h)
-        logvar = self.logvar(h).clamp(-5.0, 5.0)
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std) * 0.1
-        return mu + std * eps, mu, logvar
+        return mu
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model

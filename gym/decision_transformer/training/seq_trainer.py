@@ -12,7 +12,7 @@ class SequenceTrainer(Trainer):
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(self.batch_size)
         action_target = torch.clone(actions)
 
-        u_t, u_t_pred, mu, logvar = self.model.forward(
+        u_t, u_t_pred, mu = self.model.forward(
             states, actions, rewards, rtg[:,:-1], timesteps, attention_mask=attention_mask, odom=odom
         )
 
@@ -28,14 +28,21 @@ class SequenceTrainer(Trainer):
             None, u_t, None,
         )
 
-        kl = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1.0, dim=-1)
-        kl_loss = kl.mean()
+        prior_loss = self.prior_match_simple(mu)
 
-        beta_target = 0.0005
-        warmup_steps = 10000
-        beta_kl = min(beta_target, beta_target * (self.train_num + 1) / warmup_steps)
+        # # 더 안전한 적응형 계수 계산
+        # with torch.no_grad():
+        #     loss_magnitude = loss.item()
+        #     prior_loss_magnitude = prior_loss.item()
+            
+        #     if prior_loss_magnitude > 1e-6:  # 더 안전한 임계값
+        #         ratio = loss_magnitude / prior_loss_magnitude
+        #         target_ratio = 20.0
+        #         adaptive_coef = (ratio / target_ratio).clamp(0.001, 10.0)  # 범위 제한
+        #     else:
+        #         adaptive_coef = 0.01
 
-        loss = loss + beta_kl * kl_loss
+        loss = loss + 0.01 * prior_loss
 
         # loss_for_prev_pred = self.loss_fn(
         #     None, action_preds_for_prev, None,
@@ -58,4 +65,12 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), logvar.mean().detach().cpu().item()
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), prior_loss.detach().cpu().item()
+
+    def _var(self, x, dim=0): # 안정적 분산 
+        return x.var(dim=dim, unbiased=False).clamp_min(1e-8)
+
+    def prior_match_simple(self, mu, s=0.4): 
+        mean_loss = (mu.mean(dim=0).pow(2).mean()) 
+        var_loss = (self._var(mu, 0) - s**2).pow(2).mean() 
+        return mean_loss + var_loss
