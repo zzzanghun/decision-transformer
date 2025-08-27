@@ -335,7 +335,7 @@ def experiment(
                     )
                     
                     if j > 0:
-                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.5
+                        trajectories_2[i]['rewards'][j-1] = min_distance * 2
                         # print(trajectories_2[i]['rewards'][j-1], "trajectories_2[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories_2
@@ -704,7 +704,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=30)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=40)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=768)
     parser.add_argument('--n_layer', type=int, default=15)
