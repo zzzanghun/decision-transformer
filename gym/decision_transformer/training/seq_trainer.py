@@ -42,7 +42,8 @@ class SequenceTrainer(Trainer):
         #     else:
         #         adaptive_coef = 0.01
 
-        loss = loss + 0.01 * prior_loss
+        beta = 0.01
+        loss = loss + beta * prior_loss
 
         # loss_for_prev_pred = self.loss_fn(
         #     None, action_preds_for_prev, None,
@@ -65,12 +66,12 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), prior_loss.detach().cpu().item()
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), prior_loss.detach().cpu().item() * beta
 
     def _var(self, x, dim=0): # 안정적 분산 
         return x.var(dim=dim, unbiased=False).clamp_min(1e-8)
 
-    def prior_match_simple(self, mu, s=0.4): 
+    def prior_match_simple(self, mu, s=1.0): 
         mean_loss = (mu.mean(dim=0).pow(2).mean()) 
         var_loss = (self._var(mu, 0) - s**2).pow(2).mean() 
         return mean_loss + var_loss
