@@ -335,7 +335,7 @@ def experiment(
                     )
                     
                     if j > 0:
-                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.2
+                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.1 + 2.0
                         # print(trajectories_2[i]['rewards'][j-1], "trajectories_2[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories_2
@@ -728,5 +728,7 @@ if __name__ == '__main__':
     parser.add_argument('--coef_time_embedding', type=float, default=1)
     
     args = parser.parse_args()
+
+    torch.manual_seed(42)
 
     experiment('gym-experiment', variant=vars(args))
