@@ -279,6 +279,8 @@ class DecisionTransformer(TrajectoryModel):
         actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
         returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
         returns_embeddings = self.return_ln(returns_embeddings)
+        returns_embeddings = self.drop_dense(returns_embeddings)
+
         h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
         h_flat = self.transformer_ln(h_flat)
 
@@ -312,6 +314,7 @@ class DecisionTransformer(TrajectoryModel):
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
         state_embeddings = self.state_ln(state_embeddings)
+        state_embeddings = self.drop_dense(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
