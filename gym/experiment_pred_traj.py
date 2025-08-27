@@ -696,6 +696,14 @@ def experiment(
         if log_to_wandb:
             wandb.log(outputs)
 
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -729,6 +737,6 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    torch.manual_seed(42)
+    set_seed(42)
 
     experiment('gym-experiment', variant=vars(args))
