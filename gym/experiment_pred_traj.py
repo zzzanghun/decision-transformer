@@ -335,7 +335,7 @@ def experiment(
                     )
                     
                     if j > 0:
-                        trajectories_2[i]['rewards'][j-1] = min_distance * 2
+                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.2
                         # print(trajectories_2[i]['rewards'][j-1], "trajectories_2[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories_2
