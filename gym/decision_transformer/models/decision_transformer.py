@@ -108,7 +108,7 @@ class DecisionTransformer(TrajectoryModel):
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.norm_global_pool = nn.LayerNorm(256)
-                self.drop_dense = nn.Dropout(0.05)
+                self.drop_dense = nn.Dropout(0.1)
                 self.fc_enc = nn.Linear(256, self.before_concat_hidden_size)
             self.embed_odom = nn.Sequential(
                 nn.Linear(odom_dim, 2 * self.before_concat_hidden_size),
@@ -214,7 +214,6 @@ class DecisionTransformer(TrajectoryModel):
                 x = self.global_pool(x)
                 x = self.norm_global_pool(x.F)
                 x = F.gelu(x)     
-                x = self.drop_dense(x)
                 # 최종 임베딩 생성
                 embeddings = self.fc_enc(x)
 
@@ -237,6 +236,11 @@ class DecisionTransformer(TrajectoryModel):
         
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
+
+        state_embeddings = self.drop_dense(state_embeddings)
+        action_embeddings = self.drop_dense(action_embeddings)
+        returns_embeddings = self.drop_dense(returns_embeddings)
+
         if self.time_embedding:
             time_embeddings = self.embed_timestep(timesteps)
             time_embeddings *= self.coef_time_embedding
@@ -309,7 +313,6 @@ class DecisionTransformer(TrajectoryModel):
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
         state_embeddings = self.state_ln(state_embeddings)
-        state_embeddings = self.drop_dense(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
