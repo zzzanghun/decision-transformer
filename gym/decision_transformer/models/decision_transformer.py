@@ -245,7 +245,6 @@ class DecisionTransformer(TrajectoryModel):
         
         if self.time_embedding:
             time_embeddings = self.embed_timestep(timesteps)
-            time_embeddings *= self.coef_time_embedding
 
             # time embeddings are treated similar to positional embeddings
             state_embeddings_w_time = state_embeddings + time_embeddings
