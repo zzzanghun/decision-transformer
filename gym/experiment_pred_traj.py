@@ -502,7 +502,8 @@ def experiment(
                 d.append(traj['terminals'][si:si + max_len].reshape(1, -1))
             else:
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
-            timesteps.append(np.arange(0, 0 + p[-1].shape[1]).reshape(1, -1))
+            tlen_curr = p[-1].shape[1]
+            timesteps.append(np.arange(max_len - tlen_curr + 1, max_len + 1).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
             rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+2], gamma=1.)[:p[-1].shape[1] + 1].reshape(1, -1, 1))
             if rtg[-1].shape[1] <= p[-1].shape[1]:
@@ -732,7 +733,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_load', type=bool, default=False)
     parser.add_argument('--auto_encoder_load', type=bool, default=False)
     parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
-    parser.add_argument('--time_embedding', type=bool, default=False)
+    parser.add_argument('--time_embedding', type=bool, default=True)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
     
     args = parser.parse_args()

@@ -70,7 +70,7 @@ class DecisionTransformer(TrajectoryModel):
         # is that the positional embeddings are removed (since we'll add those ourselves)
         self.transformer = GPT2Model(config)
 
-        self.embed_timestep = nn.Embedding(20, hidden_size)
+        self.embed_timestep = nn.Embedding(30, hidden_size)
         self.embed_return = torch.nn.Sequential(
             torch.nn.Linear(1, hidden_size),
             nn.GELU(),
@@ -248,14 +248,14 @@ class DecisionTransformer(TrajectoryModel):
             time_embeddings *= self.coef_time_embedding
 
             # time embeddings are treated similar to positional embeddings
-            state_embeddings = state_embeddings + time_embeddings
+            state_embeddings_w_time = state_embeddings + time_embeddings
             action_embeddings = action_embeddings + time_embeddings
             returns_embeddings = returns_embeddings + time_embeddings
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
         stacked_inputs = torch.stack(
-            (returns_embeddings, state_embeddings, action_embeddings), dim=1
+            (returns_embeddings, state_embeddings_w_time, action_embeddings), dim=1
         ).permute(0, 2, 1, 3).reshape(batch_size, 3*seq_length, self.hidden_size)
         stacked_inputs = self.embed_ln(stacked_inputs)
 
@@ -314,6 +314,7 @@ class DecisionTransformer(TrajectoryModel):
         x_t = x_t * (1 + gamma) + beta
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        state_embeddings = self.drop_dense(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
