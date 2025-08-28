@@ -71,7 +71,11 @@ class DecisionTransformer(TrajectoryModel):
         self.transformer = GPT2Model(config)
 
         self.embed_timestep = nn.Embedding(20, hidden_size)
-        self.embed_return = torch.nn.Linear(1, hidden_size)
+        self.embed_return = torch.nn.Sequential(
+            torch.nn.Linear(1, hidden_size),
+            nn.GELU(),
+            nn.Linear(hidden_size, hidden_size),
+        )
 
         if isinstance(self.state_dim, tuple):
             self.before_concat_hidden_size = int(hidden_size / 2)
@@ -119,7 +123,11 @@ class DecisionTransformer(TrajectoryModel):
             self.norm_obstacles = nn.LayerNorm(self.before_concat_hidden_size)
         else:
             self.embed_state = torch.nn.Linear(self.state_dim, hidden_size)
-        self.embed_action = torch.nn.Linear(self.act_dim, hidden_size)
+        self.embed_action = torch.nn.Sequential(
+            torch.nn.Linear(self.act_dim, hidden_size),
+            nn.GELU(),
+            nn.Linear(hidden_size, hidden_size),
+        )
 
         self.embed_ln = nn.LayerNorm(hidden_size)
 
@@ -160,8 +168,6 @@ class DecisionTransformer(TrajectoryModel):
         self.logvar = nn.Linear(hidden_size, self.act_dim)
         nn.init.constant_(self.logvar.bias, -2.0)
 
-        self.state_ln = nn.LayerNorm(hidden_size)
-        self.return_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
         self.global_step = 0
@@ -236,11 +242,7 @@ class DecisionTransformer(TrajectoryModel):
         
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
-
-        state_embeddings = self.drop_dense(state_embeddings)
-        action_embeddings = self.drop_dense(action_embeddings)
-        returns_embeddings = self.drop_dense(returns_embeddings)
-
+        
         if self.time_embedding:
             time_embeddings = self.embed_timestep(timesteps)
             time_embeddings *= self.coef_time_embedding
@@ -312,7 +314,6 @@ class DecisionTransformer(TrajectoryModel):
         x_t = x_t * (1 + gamma) + beta
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        state_embeddings = self.state_ln(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
