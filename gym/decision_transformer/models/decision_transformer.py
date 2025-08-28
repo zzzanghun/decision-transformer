@@ -331,16 +331,7 @@ class DecisionTransformer(TrajectoryModel):
         eps = torch.randn_like(std)
         eps = eps.clamp_(-2.5, 2.5)
 
-        # --- noise annealing α(schedule on std*eps only) ---
-        step = self.global_step
-        warmup_steps = 50000
-        alpha_min = 0.01
-
-        p = float(step) / float(warmup_steps)
-        alpha = 0.5 - 0.5 * math.cos(math.pi * p)
-        alpha = alpha_min + (1.0 - alpha_min) * alpha
-
-        z = mu + (alpha * std) * eps
+        z = mu + (0.1 * std) * eps
         return z, mu, logvar
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
