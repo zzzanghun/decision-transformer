@@ -503,7 +503,7 @@ def experiment(
             else:
                 d.append(traj['dones'][si:si + max_len].reshape(1, -1))
             tlen_curr = p[-1].shape[1]
-            timesteps.append(np.arange(max_len - tlen_curr + 1, max_len + 1).reshape(1, -1))
+            timesteps.append(np.arange(max_len - tlen_curr, max_len).reshape(1, -1))
             timesteps[-1][timesteps[-1] >= max_ep_len] = max_ep_len-1  # padding cutoff
             rtg.append(discount_cumsum(traj['rewards'][si:si+max_len+2], gamma=1.)[:p[-1].shape[1] + 1].reshape(1, -1, 1))
             if rtg[-1].shape[1] <= p[-1].shape[1]:
