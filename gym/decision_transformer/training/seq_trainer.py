@@ -31,8 +31,8 @@ class SequenceTrainer(Trainer):
         kl = 0.5 * torch.sum(mu.pow(2) + logvar.exp() - logvar - 1.0, dim=-1)
         kl_loss = kl.mean()
 
-        beta_target = 0.0005
-        warmup_steps = 10000
+        beta_target = 0.0001
+        warmup_steps = 50000
         beta_kl = min(beta_target, beta_target * (self.train_num + 1) / warmup_steps)
 
         loss = loss + beta_kl * kl_loss
@@ -47,7 +47,7 @@ class SequenceTrainer(Trainer):
         self.optimizer.zero_grad()
         loss.backward()
         if iter_num > 50:
-            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 3.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 10.0)
         self.optimizer.step()

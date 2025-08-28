@@ -108,7 +108,7 @@ class DecisionTransformer(TrajectoryModel):
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.norm_global_pool = nn.LayerNorm(256)
-                self.drop_dense = nn.Dropout(0.1)
+                self.drop_dense = nn.Dropout(0.05)
                 self.fc_enc = nn.Linear(256, self.before_concat_hidden_size)
             self.embed_odom = nn.Sequential(
                 nn.Linear(odom_dim, 2 * self.before_concat_hidden_size),
@@ -156,15 +156,18 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
 
-        self.mu = nn.Linear(2*hidden_size, self.act_dim)
-        self.logvar = nn.Linear(2*hidden_size, self.act_dim)
+        self.mu = nn.Linear(hidden_size, self.act_dim)
+        self.logvar = nn.Linear(hidden_size, self.act_dim)
         nn.init.constant_(self.logvar.bias, -2.0)
 
         self.state_ln = nn.LayerNorm(hidden_size)
         self.return_ln = nn.LayerNorm(hidden_size)
         self.path = CondOTProbPath()
 
+        self.global_step = 0
+
     def forward(self, states, actions, rewards, returns_to_go, timesteps, attention_mask=None, odom=None):
+        self.global_step += 1
         batch_size, seq_length = actions.shape[0], actions.shape[1]
 
         if attention_mask is None:
@@ -281,12 +284,7 @@ class DecisionTransformer(TrajectoryModel):
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        # noise = torch.randn_like(actions_flat).to(self.device)
-        returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        returns_embeddings = self.return_ln(returns_embeddings)
-        returns_embeddings = self.drop_dense(returns_embeddings)
-
-        x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
+        x0, mu, logvar = self.x0_reparameterize(h_flat)
 
         path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t
@@ -324,8 +322,22 @@ class DecisionTransformer(TrajectoryModel):
         mu = self.mu(h)
         logvar = self.logvar(h).clamp(-5.0, 5.0)
         std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std) * 0.1
-        return mu + std * eps, mu, logvar
+
+        # --- optional: epsilon clipping for early stability ---
+        eps = torch.randn_like(std)
+        eps = eps.clamp_(-2.5, 2.5)
+
+        # --- noise annealing α(schedule on std*eps only) ---
+        step = self.global_step
+        warmup_steps = 50000
+        alpha_min = 0.01
+
+        p = float(step) / float(warmup_steps)
+        alpha = 0.5 - 0.5 * math.cos(math.pi * p)
+        alpha = alpha_min + (1.0 - alpha_min) * alpha
+
+        z = mu + (alpha * std) * eps
+        return z, mu, logvar
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model
