@@ -313,7 +313,6 @@ class DecisionTransformer(TrajectoryModel):
         x_t = x_t * (1 + gamma) + beta
 
         state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        state_embeddings = self.drop_dense(state_embeddings)
 
         x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
