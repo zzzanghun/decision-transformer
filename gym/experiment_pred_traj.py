@@ -335,7 +335,7 @@ def experiment(
                     )
                     
                     if j > 0:
-                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.1 + 2.1
+                        trajectories_2[i]['rewards'][j-1] = min_distance * 0.1 + 10.0
                         # print(trajectories_2[i]['rewards'][j-1], "trajectories_2[i]['rewards'][j-1]")
                 # Set the reward of the last step to 0
                 # Calculate the mean of all rewards in the trajectories_2
@@ -465,25 +465,18 @@ def experiment(
             )
 
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
+        used = set()
         for i in range(batch_size):
-            # num_iter가 홀수일 경우 첫번째 reward >= 2.1인 트레젝토리만, 짝수일 경우 < 2.1인 트레젝토리만 선택
             while True:
-                traj = trajectories[int(sorted_inds[batch_inds[i]])]
+                idx = np.random.choice(np.arange(num_trajectories))  # 필요시 p=... 사용
+                if idx in used:  # 중복 방지
+                    continue
+                traj = trajectories[int(sorted_inds[idx])]
                 first_reward = traj['rewards'][0]
-                
-                if num_iter % 2 == 1:  # 홀수
-                    if first_reward >= 2.1:
-                        break
-                else:
-                    if first_reward < 2.1:
-                        break
-                
-                # 조건에 맞지 않으면 다른 트레젝토리 선택
-                batch_inds = np.random.choice(
-                    np.arange(num_trajectories),
-                    size=batch_size,
-                    replace=True,
-                )
+                if (num_iter % 2 == 1 and first_reward >= 10) or (num_iter % 2 == 0 and first_reward < 10):
+                    used.add(idx)
+                    break
+
             si = random.randint(0, max(0, traj['rewards'].shape[0] - (max_len + 2)))
 
             # get sequences from dataset
