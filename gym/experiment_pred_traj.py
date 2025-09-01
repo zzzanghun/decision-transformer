@@ -467,7 +467,7 @@ def experiment(
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
-            si = random.randint(0, traj['rewards'].shape[0] - 1)
+            si = random.randint(0, max(0, traj['rewards'].shape[0] - (max_len + 2)))
 
             # get sequences from dataset
             if env_name == 'ego-planner':
@@ -721,7 +721,7 @@ if __name__ == '__main__':
     parser.add_argument('--activation_function', type=str, default='gelu')
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=0.03)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0.0001)
     parser.add_argument('--warmup_steps', type=int, default=5000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
