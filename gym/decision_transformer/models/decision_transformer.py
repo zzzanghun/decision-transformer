@@ -155,7 +155,6 @@ class DecisionTransformer(TrajectoryModel):
                 nn.Linear(hidden_size, hidden_size),
                 nn.LayerNorm(hidden_size),
         )
-        self.transformer_ln = nn.LayerNorm(hidden_size)
         self.film_gen = nn.Sequential(
                     nn.Linear(2*hidden_size, 2*hidden_size),
                     nn.GELU(),
@@ -284,7 +283,6 @@ class DecisionTransformer(TrajectoryModel):
         # flat actions, x[:,1]
         actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
         h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        h_flat = self.transformer_ln(h_flat)
 
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
