@@ -163,9 +163,13 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
 
-        self.mu = nn.Linear(hidden_size, self.act_dim)
-        self.logvar = nn.Linear(hidden_size, self.act_dim)
+        self.mu = nn.Linear(hidden_size*2, self.act_dim)
+        self.logvar = nn.Linear(hidden_size*2, self.act_dim)
         nn.init.constant_(self.logvar.bias, -2.0)
+
+        self.return_ln = nn.LayerNorm(hidden_size)
+        self.action_ln = nn.LayerNorm(hidden_size)
+        self.time_ln = nn.LayerNorm(hidden_size)
 
         self.path = CondOTProbPath()
 
@@ -241,21 +245,24 @@ class DecisionTransformer(TrajectoryModel):
         
         action_embeddings = self.embed_action(actions)
         returns_embeddings = self.embed_return(returns_to_go)
+
+        returns_embeddings = self.return_ln(returns_embeddings)
+        action_embeddings = self.action_ln(action_embeddings)
         
         if self.time_embedding:
             time_embeddings = self.embed_timestep(timesteps)
+            time_embeddings = self.time_ln(time_embeddings)
 
             # time embeddings are treated similar to positional embeddings
-            state_embeddings_w_time = state_embeddings + time_embeddings
+            state_embeddings = state_embeddings + time_embeddings
             action_embeddings = action_embeddings + time_embeddings
             returns_embeddings = returns_embeddings + time_embeddings
 
         # this makes the sequence look like (R_1, s_1, a_1, R_2, s_2, a_2, ...)
         # which works nice in an autoregressive sense since states predict actions
         stacked_inputs = torch.stack(
-            (returns_embeddings, state_embeddings_w_time, action_embeddings), dim=1
+            (returns_embeddings, state_embeddings, action_embeddings), dim=1
         ).permute(0, 2, 1, 3).reshape(batch_size, 3*seq_length, self.hidden_size)
-        stacked_inputs = self.embed_ln(stacked_inputs)
 
         # to make the attention mask fit the stacked inputs, have to stack it as well
         stacked_attention_mask = torch.stack(
@@ -287,7 +294,7 @@ class DecisionTransformer(TrajectoryModel):
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        x0, mu, logvar = self.x0_reparameterize(h_flat)
+        x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
 
         path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t

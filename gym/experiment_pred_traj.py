@@ -465,18 +465,9 @@ def experiment(
             )
 
         s, a, r, d, rtg, timesteps, mask, p = [], [], [], [], [], [], [], []
-        used = set()
-        for i in range(batch_size):
-            while True:
-                idx = np.random.choice(np.arange(num_trajectories))  # 필요시 p=... 사용
-                if idx in used:  # 중복 방지
-                    continue
-                traj = trajectories[int(sorted_inds[idx])]
-                first_reward = traj['rewards'][0]
-                if (num_iter % 2 == 1 and first_reward >= 10) or (num_iter % 2 == 0 and first_reward < 10):
-                    used.add(idx)
-                    break
 
+        for i in range(batch_size):
+            traj = trajectories[int(sorted_inds[batch_inds[i]])]
             si = random.randint(0, max(0, traj['rewards'].shape[0] - (max_len + 2)))
 
             # get sequences from dataset
