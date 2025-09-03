@@ -290,6 +290,7 @@ class DecisionTransformer(TrajectoryModel):
         # flat actions, x[:,1]
         actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
         h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
         # create t, x_t, u_t
         t = torch.rand(actions_flat.shape[0]).to(self.device)
