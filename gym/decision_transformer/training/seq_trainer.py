@@ -9,7 +9,13 @@ class SequenceTrainer(Trainer):
 
     def train_step(self, iter_num):
         self.train_num += 1
-        states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(batch_size=self.batch_size, num_iter=self.train_num)
+        
+        if self.train_num < 50000:
+            current_batch_size = self.batch_size
+        else:
+            current_batch_size = self.batch_size / 8
+
+        states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(batch_size=current_batch_size, num_iter=self.train_num)
         action_target = torch.clone(actions)
 
         u_t, u_t_pred, mu, logvar = self.model.forward(
