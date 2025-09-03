@@ -381,7 +381,7 @@ def experiment(
 
     for i in range(len(trajectories)):
         for j in range(len(trajectories[i]['actions'])):
-            trajectories[i]['actions'][j] = 2.0 * ((trajectories[i]['actions'][j] - action_norm_mu) / action_norm_std)
+            trajectories[i]['actions'][j] = ((trajectories[i]['actions'][j] - action_norm_mu) / action_norm_std)
             trajectories[i]['observations'][j]['odom'] = (trajectories[i]['observations'][j]['odom'] - odom_norm_mu) / odom_norm_std
 
     # save all path information into separate lists
