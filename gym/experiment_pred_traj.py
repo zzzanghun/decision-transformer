@@ -714,15 +714,15 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=30)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=40)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=768)
     parser.add_argument('--n_layer', type=int, default=15)
     parser.add_argument('--n_head', type=int, default=12)
     parser.add_argument('--activation_function', type=str, default='gelu')
     parser.add_argument('--dropout', type=float, default=0.05)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=5e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=0.003)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=2e-4)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0.001)
     parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
