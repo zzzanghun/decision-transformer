@@ -14,7 +14,7 @@ class SequenceTrainer(Trainer):
             current_batch_size = self.batch_size
             grad_clip_value = 3.0
         else:
-            current_batch_size = self.batch_size / 8
+            current_batch_size = int(self.batch_size / 8)
             grad_clip_value = 1.5
 
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(batch_size=current_batch_size, num_iter=self.train_num)
