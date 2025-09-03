@@ -683,13 +683,21 @@ def experiment(
 
     for iter in range(variant['max_iters']):
         outputs = trainer.train_iteration(num_steps=variant['num_steps_per_iter'], iter_num=iter+1, print_logs=True)
-        if (iter + 1) % 100 == 0:
-            min_action_error = outputs['training/train_loss_mean']
+        action_error = outputs['training/train_loss_mean']
+        if ((iter + 1) % 100 == 0) or (iter + 1 > 300 and action_error < min_action_error):
+            if iter + 1 > 300 and action_error < min_action_error:
+                min_action_error = action_error
+                min_error = True
+            else:
+                min_error = False
             current_date = datetime.now().strftime('%Y-%m-%d')
             folder_name = f"{PROJECT_PATH}/model/3d_end-to-end/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            save_other_model_path = os.path.join(folder_name, '3d_model.pth')
+            if min_error:
+                save_other_model_path = os.path.join(folder_name, '3d_model_min_error.pth')
+            else:
+                save_other_model_path = os.path.join(folder_name, '3d_model.pth')
             model_dict = model.state_dict()
             torch.save(model_dict, save_other_model_path)
             print(f"Model saved at iteration {iter+1}")
