@@ -12,8 +12,10 @@ class SequenceTrainer(Trainer):
         
         if self.train_num < 50000:
             current_batch_size = self.batch_size
+            grid_clip_value = 5.0
         else:
             current_batch_size = self.batch_size / 8
+            grid_clip_value = 2.0
 
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(batch_size=current_batch_size, num_iter=self.train_num)
         action_target = torch.clone(actions)
@@ -53,7 +55,7 @@ class SequenceTrainer(Trainer):
         self.optimizer.zero_grad()
         loss.backward()
         if iter_num > 50:
-            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), grid_clip_value)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 10.0)
         self.optimizer.step()
