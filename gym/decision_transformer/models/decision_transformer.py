@@ -164,7 +164,7 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].bias)
 
         self.mu = nn.Linear(hidden_size*2, self.act_dim)
-        self.logvar = nn.Linear(hidden_size*2, self.act_dim)
+        self.logvar = nn.Linear(hidden_size*2 + self.act_dim, self.act_dim)
         nn.init.constant_(self.logvar.bias, -2.0)
 
         self.return_ln = nn.LayerNorm(hidden_size)
@@ -329,12 +329,13 @@ class DecisionTransformer(TrajectoryModel):
 
     def x0_reparameterize(self, h):
         mu = self.mu(h)
-        logvar = self.logvar(h).clamp(-5.0, 5.0)
-        std = torch.exp(0.5 * logvar)
 
         # --- optional: epsilon clipping for early stability ---
-        eps = torch.randn_like(std)
+        eps = torch.randn_like(mu)
         eps = eps.clamp_(-2.5, 2.5)
+
+        logvar = self.logvar(torch.cat([h, eps], dim=-1)).clamp(-5.0, 5.0)
+        std = torch.exp(0.5 * logvar)
 
         z = mu + (0.1 * std) * eps
         return z, mu, logvar
