@@ -638,9 +638,15 @@ def experiment(
 
     model = model.to(device=device)
 
+    # train only mu head
+    for p in model.parameters():
+        p.requires_grad = False
+    for p in model.mu.parameters():
+        p.requires_grad = True
+
     warmup_steps = variant['warmup_steps']
     optimizer = torch.optim.AdamW(
-        param_groups(model, wd=variant['weight_decay']),
+        [{'params': model.mu.parameters(), 'weight_decay': variant['weight_decay']}],
         lr=variant['learning_rate'], betas=(0.9, 0.999), eps=1e-8
     )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -729,8 +735,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_head', type=int, default=12)
     parser.add_argument('--activation_function', type=str, default='gelu')
     parser.add_argument('--dropout', type=float, default=0.05)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=2e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=0.001)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=5e-4)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0.0)
     parser.add_argument('--warmup_steps', type=int, default=1000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
