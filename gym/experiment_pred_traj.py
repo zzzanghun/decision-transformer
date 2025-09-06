@@ -623,8 +623,11 @@ def experiment(
                 attn_pdrop=variant['dropout'],
             )
         if model_load:
-            model_dict = torch.load(model_path)
-            model.load_state_dict(model_dict, strict=True)
+            loaded_state = torch.load(model_path, map_location=device)
+            # drop self.mu parameters to re-train from scratch
+            filtered_state = {k: v for k, v in loaded_state.items()
+                              if not (k.startswith('mu.') or k.endswith('mu.weight') or k.endswith('mu.bias') or '.mu.' in k or k == 'mu.weight' or k == 'mu.bias')}
+            model.load_state_dict(filtered_state, strict=False)
     elif model_type == 'bc':
         model = MLPBCModel(
             state_dim=state_dim,
