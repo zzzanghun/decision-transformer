@@ -29,14 +29,14 @@ class SequenceTrainer(Trainer):
             None, u_t, None,
         )
 
-        # kl = 0.5 * torch.sum(mu.pow(2), dim=-1)
-        # kl_loss = kl.mean()
+        kl = 0.5 * torch.sum(mu.pow(2), dim=-1)
+        kl_loss = kl.mean()
 
-        # beta_target = 0.0001
-        # warmup_steps = 50000
-        # beta_kl = min(beta_target, beta_target * (self.train_num + 1) / warmup_steps)
+        beta_target = 0.0001
+        warmup_steps = 50000
+        beta_kl = min(beta_target, beta_target * (self.train_num + 1) / warmup_steps)
 
-        # loss = loss + beta_kl * kl_loss
+        loss = loss + beta_kl * kl_loss
 
         # loss_for_prev_pred = self.loss_fn(
         #     None, action_preds_for_prev, None,
@@ -48,7 +48,7 @@ class SequenceTrainer(Trainer):
         self.optimizer.zero_grad()
         loss.backward()
         if iter_num > 50:
-            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 2.0)
         else:
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), 20.0)
         self.optimizer.step()
@@ -59,4 +59,4 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), None, mu.mean().detach().cpu().item(), None
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), None

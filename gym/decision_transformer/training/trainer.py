@@ -35,7 +35,7 @@ class Trainer:
             train_loss, grad_norm, kl_loss, mu, logvar = self.train_step(iter_num)
             train_losses.append(train_loss)
             grad_norms.append(grad_norm)
-            # kl_losses.append(kl_loss)
+            kl_losses.append(kl_loss)
             mus.append(mu)
             # logvars.append(logvar)
             if self.scheduler is not None:
@@ -56,7 +56,7 @@ class Trainer:
         logs['training/train_loss_mean'] = np.mean(train_losses)
         logs['training/train_loss_std'] = np.std(train_losses)
         logs['training/grad_norm_mean'] = np.mean(grad_norms)
-        # logs['training/kl_loss_mean'] = np.mean(kl_losses)
+        logs['training/kl_loss_mean'] = np.mean(kl_losses)
         logs['training/mu_mean'] = np.mean(mus)
         # logs['training/logvar_mean'] = np.mean(logvars)
 
