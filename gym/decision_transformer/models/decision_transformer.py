@@ -163,8 +163,20 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].weight) 
         nn.init.zeros_(self.film_gen[-1].bias)
 
-        self.mu = nn.Linear(hidden_size*2, self.act_dim)
-        self.logvar = nn.Linear(hidden_size*2, self.act_dim)
+        self.mu = nn.Sequential(
+                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(2*hidden_size, self.act_dim)
+        )
+        self.logvar = nn.Sequential(
+                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(2*hidden_size, self.act_dim)
+        )
         nn.init.constant_(self.logvar.bias, -2.0)
 
         self.return_ln = nn.LayerNorm(hidden_size)
