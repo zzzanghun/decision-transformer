@@ -160,7 +160,7 @@ class DecisionTransformer(TrajectoryModel):
                     nn.GELU(),
                     nn.Linear(2*hidden_size, 2*hidden_size)
         )
-        nn.init.zeros_(self.film_gen[-1].weight) 
+        nn.init.xavier_uniform_(self.film_gen[-1].weight, gain=1e-3)
         nn.init.zeros_(self.film_gen[-1].bias)
 
         self.mu = nn.Sequential(
@@ -305,7 +305,13 @@ class DecisionTransformer(TrajectoryModel):
         returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
         # create t, x_t, u_t
-        t = torch.rand(actions_flat.shape[0]).to(self.device)
+        r = torch.rand(1, device=self.device).item()
+        if r <= 0.8:
+            dist = torch.distributions.Beta(5.0, 2.0)
+            t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
+        else:
+            t = torch.rand(actions_flat.shape[0]).to(self.device)
+        t = t.clamp(min=0.001, max=1.0 - 0.001)
 
         x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
 
@@ -337,7 +343,10 @@ class DecisionTransformer(TrajectoryModel):
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)
 
-        return u_t, u_t_pred, mu, logvar
+        h_flat_sensitivity = self.sensitivity(u_t_pred, h_flat)
+        mu_sensitivity = self.sensitivity(u_t_pred, mu)
+
+        return u_t, u_t_pred, mu, logvar, mu_sensitivity/h_flat_sensitivity
 
     def x0_reparameterize(self, h):
         mu = self.mu(h)
@@ -350,6 +359,12 @@ class DecisionTransformer(TrajectoryModel):
 
         z = mu + (0.1 * std) * eps
         return z, mu, logvar
+
+    def sensitivity(self, u, x):
+        go = torch.full_like(u, 1.0 / u.numel())
+        g = torch.autograd.grad(u, x, grad_outputs=go, retain_graph=True, allow_unused=False)[0]
+    
+        return float((g.norm() / (x.detach().std() + 1e-8)))        
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model

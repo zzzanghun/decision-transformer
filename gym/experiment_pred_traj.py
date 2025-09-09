@@ -639,10 +639,49 @@ def experiment(
     model = model.to(device=device)
 
     warmup_steps = variant['warmup_steps']
-    optimizer = torch.optim.AdamW(
-        param_groups(model, wd=variant['weight_decay']),
-        lr=variant['learning_rate'], betas=(0.9, 0.999), eps=1e-8
-    )
+    # Set different learning rates for heads (mu/logvar) vs the rest
+    heads_lr = variant['learning_rate'] * 0.1
+
+    if hasattr(model, 'mu') and hasattr(model, 'logvar'):
+        head_params = list(model.mu.named_parameters()) + list(model.logvar.named_parameters())
+        head_decay, head_no_decay = [], []
+        for n, p in head_params:
+            if (n.endswith('bias') or p.dim() == 1):
+                head_no_decay.append(p)
+            else:
+                head_decay.append(p)
+
+        decay, no_decay = [], []
+        head_param_ids = {id(p) for _, p in head_params}
+        for n, p in model.named_parameters():
+            if id(p) in head_param_ids:
+                continue
+            if not p.requires_grad:
+                continue
+            nl = n.lower()
+            if n.endswith('bias') or p.dim() == 1:
+                no_decay.append(p)
+            elif any(k in nl for k in ['norm', 'layernorm', 'groupnorm', 'bn', 'batchnorm']):
+                no_decay.append(p)
+            elif any(k in nl for k in ['pos_embed', 'position_embedding', 'positional_embedding', 'position_embeddings']):
+                no_decay.append(p)
+            else:
+                decay.append(p)
+
+        optimizer = torch.optim.AdamW(
+            [
+                {'params': decay, 'weight_decay': variant['weight_decay'], 'lr': variant['learning_rate']},
+                {'params': no_decay, 'weight_decay': 0.0, 'lr': variant['learning_rate']},
+                {'params': head_decay, 'weight_decay': variant['weight_decay'], 'lr': heads_lr},
+                {'params': head_no_decay, 'weight_decay': 0.0, 'lr': heads_lr},
+            ],
+            betas=(0.9, 0.999), eps=1e-8
+        )
+    else:
+        optimizer = torch.optim.AdamW(
+            param_groups(model, wd=variant['weight_decay']),
+            lr=variant['learning_rate'], betas=(0.9, 0.999), eps=1e-8
+        )
     scheduler = torch.optim.lr_scheduler.LambdaLR(
         optimizer,
         lambda steps: min((steps+1)/warmup_steps, 1)
@@ -722,7 +761,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default='normal')  # normal for standard setting, delayed for sparse
     parser.add_argument('--K', type=int, default=30)
     parser.add_argument('--pct_traj', type=float, default=1.)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--model_type', type=str, default='dt')  # dt for decision transformer, bc for behavior cloning
     parser.add_argument('--embed_dim', type=int, default=256)
     parser.add_argument('--n_layer', type=int, default=5)

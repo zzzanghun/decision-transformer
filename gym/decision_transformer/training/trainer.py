@@ -26,18 +26,20 @@ class Trainer:
         kl_losses = []
         mus = []
         logvars = []
+        mu_sensitivity_h_flat_sensitivities = []
         logs = dict()
 
         train_start = time.time()
 
         self.model.train()
         for _ in range(num_steps):
-            train_loss, grad_norm, kl_loss, mu, logvar = self.train_step(iter_num)
+            train_loss, grad_norm, kl_loss, mu, logvar, mu_sensitivity_h_flat_sensitivity = self.train_step(iter_num)
             train_losses.append(train_loss)
             grad_norms.append(grad_norm)
             kl_losses.append(kl_loss)
             mus.append(mu)
             logvars.append(logvar)
+            mu_sensitivity_h_flat_sensitivities.append(mu_sensitivity_h_flat_sensitivity)
             if self.scheduler is not None:
                 self.scheduler.step()
 
@@ -59,7 +61,8 @@ class Trainer:
         logs['training/kl_loss_mean'] = np.mean(kl_losses)
         logs['training/mu_mean'] = np.mean(mus)
         logs['training/logvar_mean'] = np.mean(logvars)
-
+        logs['training/mu_sensitivity_h_flat_sensitivity_mean'] = np.mean(mu_sensitivity_h_flat_sensitivities)
+        
         for k in self.diagnostics:
             logs[k] = self.diagnostics[k]
 
