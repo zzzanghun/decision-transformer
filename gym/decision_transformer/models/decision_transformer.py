@@ -177,7 +177,7 @@ class DecisionTransformer(TrajectoryModel):
                     nn.GELU(),
                     nn.Linear(2*hidden_size, self.act_dim)
         )
-        nn.init.constant_(self.logvar.bias, -2.0)
+        nn.init.constant_(self.logvar[-1].bias, -2.0)
 
         self.return_ln = nn.LayerNorm(hidden_size)
         self.action_ln = nn.LayerNorm(hidden_size)
