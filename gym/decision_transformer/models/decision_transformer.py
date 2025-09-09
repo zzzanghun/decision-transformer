@@ -329,16 +329,15 @@ class DecisionTransformer(TrajectoryModel):
 
     def x0_reparameterize(self, h):
         mu = self.mu(h)
+        logvar = self.logvar(h).clamp(-5.0, 5.0)
+        std = torch.exp(0.5 * logvar)
 
         # --- optional: epsilon clipping for early stability ---
-        # eps = torch.randn_like(mu)
-        # eps = eps.clamp_(-2.5, 2.5)
+        eps = torch.randn_like(std)
+        eps = eps.clamp_(-2.5, 2.5)
 
-        # logvar = self.logvar(torch.cat([h, eps], dim=-1)).clamp(-5.0, 5.0)
-        # std = torch.exp(0.5 * logvar)
-
-        z = mu
-        return z, mu, None
+        z = mu + (0.1 * std) * eps
+        return z, mu, logvar
 
     def get_action(self, states, actions, rewards, returns_to_go, timesteps, **kwargs):
         # we don't care about the past rewards in this model

@@ -37,7 +37,7 @@ class Trainer:
             grad_norms.append(grad_norm)
             kl_losses.append(kl_loss)
             mus.append(mu)
-            # logvars.append(logvar)
+            logvars.append(logvar)
             if self.scheduler is not None:
                 self.scheduler.step()
 
@@ -58,7 +58,7 @@ class Trainer:
         logs['training/grad_norm_mean'] = np.mean(grad_norms)
         logs['training/kl_loss_mean'] = np.mean(kl_losses)
         logs['training/mu_mean'] = np.mean(mus)
-        # logs['training/logvar_mean'] = np.mean(logvars)
+        logs['training/logvar_mean'] = np.mean(logvars)
 
         for k in self.diagnostics:
             logs[k] = self.diagnostics[k]
