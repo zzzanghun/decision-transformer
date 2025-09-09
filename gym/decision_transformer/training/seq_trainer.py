@@ -59,4 +59,4 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), logvar.mean().detach().cpu().item(), mu_sensitivity_h_flat_sensitivity.mean().detach().cpu().item()
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), logvar.mean().detach().cpu().item(), mu_sensitivity_h_flat_sensitivity
