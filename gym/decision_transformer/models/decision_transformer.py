@@ -304,6 +304,9 @@ class DecisionTransformer(TrajectoryModel):
         h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
         returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
 
+        returns_embeddings = self.drop_dense(returns_embeddings)
+        state_embeddings = self.drop_dense(state_embeddings)
+
         # create t, x_t, u_t
         r = torch.rand(1, device=self.device).item()
         if r <= 0.8:
@@ -311,7 +314,6 @@ class DecisionTransformer(TrajectoryModel):
             t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
         else:
             t = torch.rand(actions_flat.shape[0]).to(self.device)
-        t = t.clamp(min=0.001, max=1.0 - 0.001)
 
         x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
 
