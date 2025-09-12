@@ -233,8 +233,7 @@ class DecisionTransformer(TrajectoryModel):
                 
                 # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환
                 x = self.global_pool(x)
-                x = self.norm_global_pool(x.F)
-                x = F.gelu(x)     
+                x = F.gelu(x.F)     
                 # 최종 임베딩 생성
                 embeddings = self.fc_enc(x)
 
