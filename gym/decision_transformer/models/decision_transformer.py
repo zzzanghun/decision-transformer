@@ -306,8 +306,12 @@ class DecisionTransformer(TrajectoryModel):
         returns_embeddings = self.drop_dense(returns_embeddings)
         state_embeddings = self.drop_dense(state_embeddings)
 
-        # create t, x_t, u_t
-        t = torch.rand(actions_flat.shape[0]).to(self.device)
+        r = torch.rand(1, device=self.device).item()
+        if r <= 0.8:
+            dist = torch.distributions.Beta(5.0, 2.0)
+            t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
+        else:
+            t = torch.rand(actions_flat.shape[0]).to(self.device)
 
         x0, mu, logvar = self.x0_reparameterize(h_flat)
 
