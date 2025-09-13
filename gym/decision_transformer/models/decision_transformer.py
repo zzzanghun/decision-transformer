@@ -145,7 +145,7 @@ class DecisionTransformer(TrajectoryModel):
                 nn.LayerNorm(hidden_size),
         )
         self.predict_velocity = nn.Sequential(
-                nn.Linear(hidden_size*2, hidden_size),
+                nn.Linear(hidden_size, hidden_size),
                 nn.GELU(),
                 nn.Linear(hidden_size, self.act_dim),
         )
@@ -164,18 +164,18 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].bias)
 
         self.mu = nn.Sequential(
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(hidden_size, hidden_size),
                     nn.GELU(),
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(hidden_size, hidden_size),
                     nn.GELU(),
-                    nn.Linear(2*hidden_size, self.act_dim)
+                    nn.Linear(hidden_size, self.act_dim)
         )
         self.logvar = nn.Sequential(
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(hidden_size, hidden_size),
                     nn.GELU(),
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(hidden_size, hidden_size),
                     nn.GELU(),
-                    nn.Linear(2*hidden_size, self.act_dim)
+                    nn.Linear(hidden_size, self.act_dim)
         )
         nn.init.constant_(self.logvar[-1].bias, -2.0)
 
@@ -290,6 +290,7 @@ class DecisionTransformer(TrajectoryModel):
         # reshape x so that the second dimension corresponds to the original
         # returns (0), states (1), or actions (2); i.e. x[:,1,t] is the token for s_t
         x = x.reshape(batch_size, seq_length, 3, self.hidden_size).permute(0, 2, 1, 3)
+        tf_embeddings = x[:,1]
 
         # get predictions
         # return_preds = self.predict_return(x[:,2])  # predict next return given state and action
@@ -299,22 +300,16 @@ class DecisionTransformer(TrajectoryModel):
         # print(x[:,1].shape, "@@@@@@")
 
         # flat actions, x[:,1]
-        actions_flat = actions.reshape(-1, self.act_dim)[attention_mask.reshape(-1) > 0]
-        h_flat = x[:,1].reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-        returns_embeddings = returns_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
+        actions_flat = actions[:, -1]
+        h_flat = tf_embeddings[:, -1]
 
         returns_embeddings = self.drop_dense(returns_embeddings)
         state_embeddings = self.drop_dense(state_embeddings)
 
         # create t, x_t, u_t
-        r = torch.rand(1, device=self.device).item()
-        if r <= 0.8:
-            dist = torch.distributions.Beta(5.0, 2.0)
-            t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
-        else:
-            t = torch.rand(actions_flat.shape[0]).to(self.device)
+        t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings], dim=-1))
+        x0, mu, logvar = self.x0_reparameterize(h_flat)
 
         path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t
@@ -336,10 +331,6 @@ class DecisionTransformer(TrajectoryModel):
 
         # adapt Film to x_t
         x_t = x_t * (1 + gamma) + beta
-
-        state_embeddings = state_embeddings.reshape(-1, self.hidden_size)[attention_mask.reshape(-1) > 0]
-
-        x_t = torch.cat([x_t, state_embeddings], dim=-1)
 
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)

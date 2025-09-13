@@ -468,6 +468,8 @@ def experiment(
 
         for i in range(batch_size):
             traj = trajectories[int(sorted_inds[batch_inds[i]])]
+            if len(traj['rewards']) < max_len + 2:
+                continue
             si = random.randint(0, max(0, traj['rewards'].shape[0] - (max_len + 2)))
 
             # get sequences from dataset
