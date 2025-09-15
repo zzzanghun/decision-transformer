@@ -299,12 +299,20 @@ class DecisionTransformer(TrajectoryModel):
 
         # print(x[:,1].shape, "@@@@@@")
 
-        # flat actions, x[:,1]
-        actions_flat = actions[:, -3:].reshape(-1, self.act_dim)
-        h_flat = tf_embeddings[:, -3:].reshape(-1, self.hidden_size)
+        # Generate random indices for masking
+        mask_indices = torch.zeros(batch_size, self.max_length, dtype=torch.bool, device=self.device)
+        
+        for i in range(batch_size):
+            # Randomly select max_length//2 indices from [0, max_length)
+            selected_indices = torch.randperm(self.max_length, device=self.device)[:self.max_length//3]
+            mask_indices[i, selected_indices] = True
+
+        # Apply mask to actions - only keep actions where mask_indices is True
+        actions_flat = actions[mask_indices]
+        h_flat = tf_embeddings[mask_indices]
 
         r = torch.rand(1, device=self.device).item()
-        if r <= 0.8:
+        if r <= 0.7:
             dist = torch.distributions.Beta(5.0, 2.0)
             t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
         else:
