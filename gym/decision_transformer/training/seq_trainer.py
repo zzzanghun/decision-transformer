@@ -13,9 +13,14 @@ class SequenceTrainer(Trainer):
         states, actions, rewards, dones, rtg, timesteps, attention_mask, odom = self.get_batch(batch_size=self.batch_size, num_iter=self.train_num)
         action_target = torch.clone(actions)
 
-        u_t, u_t_pred, mu, logvar, mu_sensitivity_h_flat_sensitivity = self.model.forward(
+        u_t, u_t_pred, mu, logvar, state_embeddings, returns_embeddings, h_flat = self.model.forward(
             states, actions, rewards, rtg[:,:-1], timesteps, attention_mask=attention_mask, odom=odom
         )
+
+        mu.retain_grad()
+        h_flat.retain_grad()
+        state_embeddings.retain_grad()
+        returns_embeddings.retain_grad()
 
         # act_dim = actions.shape[2]
         # action_preds = action_preds.reshape(-1, act_dim)[attention_mask.reshape(-1) > 0]
@@ -59,4 +64,4 @@ class SequenceTrainer(Trainer):
             # action_target[:, :] = action_target[:, :]
             # self.diagnostics['training/action_error'] = torch.mean((action_preds-action_target)**2).detach().cpu().item()
 
-        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), logvar.mean().detach().cpu().item(), mu_sensitivity_h_flat_sensitivity
+        return loss.detach().cpu().item(), grad_norm.detach().cpu().item(), kl_loss.detach().cpu().item() * beta_kl, mu.mean().detach().cpu().item(), logvar.mean().detach().cpu().item(), float(mu.grad.norm())/float(h_flat.grad.norm()), float(mu.grad.norm())/float(state_embeddings.grad.norm()), float(mu.grad.norm())/float(returns_embeddings.grad.norm())

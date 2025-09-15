@@ -156,7 +156,9 @@ class DecisionTransformer(TrajectoryModel):
                 nn.LayerNorm(hidden_size),
         )
         self.film_gen = nn.Sequential(
-                    nn.Linear(2*hidden_size, 2*hidden_size),
+                    nn.Linear(4*hidden_size, 3*hidden_size),
+                    nn.GELU(),
+                    nn.Linear(3*hidden_size, 2*hidden_size),
                     nn.GELU(),
                     nn.Linear(2*hidden_size, 2*hidden_size)
         )
@@ -164,16 +166,16 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.zeros_(self.film_gen[-1].bias)
 
         self.mu = nn.Sequential(
-                    nn.Linear(hidden_size, hidden_size),
+                    nn.Linear(3*hidden_size, 2*hidden_size),
                     nn.GELU(),
-                    nn.Linear(hidden_size, hidden_size),
+                    nn.Linear(2*hidden_size, hidden_size),
                     nn.GELU(),
                     nn.Linear(hidden_size, self.act_dim)
         )
         self.logvar = nn.Sequential(
-                    nn.Linear(hidden_size, hidden_size),
+                    nn.Linear(3*hidden_size, 2*hidden_size),
                     nn.GELU(),
-                    nn.Linear(hidden_size, hidden_size),
+                    nn.Linear(2*hidden_size, hidden_size),
                     nn.GELU(),
                     nn.Linear(hidden_size, self.act_dim)
         )
@@ -310,15 +312,12 @@ class DecisionTransformer(TrajectoryModel):
         # Apply mask to actions - only keep actions where mask_indices is True
         actions_flat = actions[mask_indices]
         h_flat = tf_embeddings[mask_indices]
+        state_embeddings = state_embeddings[mask_indices]
+        returns_embeddings = returns_embeddings[mask_indices]
 
-        r = torch.rand(1, device=self.device).item()
-        if r <= 0.7:
-            dist = torch.distributions.Beta(5.0, 2.0)
-            t = dist.sample((actions_flat.shape[0], )).to(device=self.device, dtype=torch.float32)
-        else:
-            t = torch.rand(actions_flat.shape[0]).to(self.device)
+        t = torch.rand(actions_flat.shape[0]).to(self.device)
 
-        x0, mu, logvar = self.x0_reparameterize(h_flat)
+        x0, mu, logvar = self.x0_reparameterize(torch.cat([h_flat, returns_embeddings, state_embeddings], dim=-1))
 
         path_sample = self.path.sample(t=t, x_0=x0, x_1=actions_flat)
         x_t = path_sample.x_t
@@ -329,7 +328,7 @@ class DecisionTransformer(TrajectoryModel):
         t = self.embed_time(t)
 
         # h_flat + t
-        h_flat_t = torch.cat([h_flat, t], dim=-1)
+        h_flat_t = torch.cat([h_flat, returns_embeddings, state_embeddings, t], dim=-1)
 
         # Film Gen
         gamma_beta = self.film_gen(h_flat_t)
@@ -344,10 +343,7 @@ class DecisionTransformer(TrajectoryModel):
         # predict u_t
         u_t_pred = self.predict_velocity(x_t)
 
-        h_flat_sensitivity = self.sensitivity(u_t_pred, h_flat)
-        mu_sensitivity = self.sensitivity(u_t_pred, mu)
-
-        return u_t, u_t_pred, mu, logvar, mu_sensitivity/h_flat_sensitivity
+        return u_t, u_t_pred, mu, logvar, state_embeddings, returns_embeddings, h_flat
 
     def x0_reparameterize(self, h):
         mu = self.mu(h)
@@ -355,10 +351,15 @@ class DecisionTransformer(TrajectoryModel):
         std = torch.exp(0.5 * logvar)
 
         # --- optional: epsilon clipping for early stability ---
-        eps = torch.randn_like(std)
+        eps_list = []
+        for i in range(10):
+            eps = torch.randn_like(std)
+            eps_list.append(eps)
+        eps = torch.stack(eps_list, dim=0)
+        eps = eps.mean(dim=0)
         eps = eps.clamp_(-2.5, 2.5)
 
-        z = mu + (0.1 * std) * eps
+        z = mu + std * eps
         return z, mu, logvar
 
     def sensitivity(self, u, x):
