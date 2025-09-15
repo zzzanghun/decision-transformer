@@ -300,11 +300,8 @@ class DecisionTransformer(TrajectoryModel):
         # print(x[:,1].shape, "@@@@@@")
 
         # flat actions, x[:,1]
-        actions_flat = actions[:, -1]
-        h_flat = tf_embeddings[:, -1]
-
-        returns_embeddings = self.drop_dense(returns_embeddings)
-        state_embeddings = self.drop_dense(state_embeddings)
+        actions_flat = actions[:, -3:].reshape(-1, self.act_dim)
+        h_flat = tf_embeddings[:, -3:].reshape(-1, self.hidden_size)
 
         r = torch.rand(1, device=self.device).item()
         if r <= 0.8:
