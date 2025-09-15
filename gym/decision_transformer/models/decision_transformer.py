@@ -139,10 +139,9 @@ class DecisionTransformer(TrajectoryModel):
         self.predict_return = torch.nn.Linear(hidden_size, 1)
 
         self.embed_action_time = nn.Sequential(
-                nn.Linear(self.act_dim, hidden_size),
+                nn.Linear(self.act_dim + 128, hidden_size),
                 nn.GELU(),
                 nn.Linear(hidden_size, hidden_size),
-                nn.LayerNorm(hidden_size),
         )
         self.predict_velocity = nn.Sequential(
                 nn.Linear(hidden_size, hidden_size),
@@ -150,13 +149,13 @@ class DecisionTransformer(TrajectoryModel):
                 nn.Linear(hidden_size, self.act_dim),
         )
         self.embed_time = nn.Sequential(
-                nn.Linear(hidden_size, hidden_size),
+                nn.Linear(128, 128),
                 nn.GELU(),
-                nn.Linear(hidden_size, hidden_size),
-                nn.LayerNorm(hidden_size),
+                nn.Linear(128, 128),
+                nn.LayerNorm(128),
         )
         self.film_gen = nn.Sequential(
-                    nn.Linear(4*hidden_size, 3*hidden_size),
+                    nn.Linear(3*hidden_size, 3*hidden_size),
                     nn.GELU(),
                     nn.Linear(3*hidden_size, 2*hidden_size),
                     nn.GELU(),
@@ -324,18 +323,18 @@ class DecisionTransformer(TrajectoryModel):
         u_t = path_sample.dx_t.detach()
 
         # t embedding
-        t = timestep_embedding(t, self.hidden_size)
+        t = timestep_embedding(t, 128)
         t = self.embed_time(t)
 
         # h_flat + t
-        h_flat_t = torch.cat([h_flat, returns_embeddings, state_embeddings, t], dim=-1)
+        h_flat_t = torch.cat([h_flat, returns_embeddings, state_embeddings], dim=-1)
 
         # Film Gen
         gamma_beta = self.film_gen(h_flat_t)
         gamma, beta = gamma_beta.chunk(2, dim=-1)
 
         # x_t embedding
-        x_t = self.embed_action_time(x_t)
+        x_t = self.embed_action_time(torch.cat([x_t, t], dim=-1))
 
         # adapt Film to x_t
         x_t = x_t * (1 + gamma) + beta
