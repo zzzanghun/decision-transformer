@@ -162,6 +162,7 @@ def experiment(
     auto_encoder_load = variant.get('auto_encoder_load')
     env_name, dataset = variant['env'], variant['dataset']
     model_type = variant['model_type']
+    wandb_name = variant['wandb_name']
     group_name = f'{exp_prefix}-{env_name}-{dataset}'
     exp_prefix = f'{group_name}-{random.randint(int(1e5), int(1e6) - 1)}'
 
@@ -404,7 +405,7 @@ def experiment(
 
     if log_to_wandb:
         wandb.init(
-            name="end-to-end",
+            name=wandb_name,
             group=group_name,
             project='DT+FM',
             config=variant
@@ -644,8 +645,8 @@ def experiment(
     # Set different learning rates for heads (mu/logvar) vs the rest
     heads_lr = variant['learning_rate'] * 0.1
 
-    if hasattr(model, 'mu') and hasattr(model, 'logvar'):
-        head_params = list(model.mu.named_parameters()) + list(model.logvar.named_parameters())
+    if hasattr(model, 'mu_2') and hasattr(model, 'logvar'):
+        head_params = list(model.mu_2.named_parameters()) + list(model.logvar.named_parameters())
         head_decay, head_no_decay = [], []
         for n, p in head_params:
             if (n.endswith('bias') or p.dim() == 1):
@@ -785,6 +786,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_path', type=str, default=f'{PROJECT_PATH}/model/2024-10-19/6050_1.828267e-05/total_model.pth')
     parser.add_argument('--time_embedding', type=bool, default=True)
     parser.add_argument('--coef_time_embedding', type=float, default=1)
+    parser.add_argument('--wandb_name', type=str, default='dt+fm')
     
     args = parser.parse_args()
 

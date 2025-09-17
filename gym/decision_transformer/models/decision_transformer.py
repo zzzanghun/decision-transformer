@@ -164,8 +164,8 @@ class DecisionTransformer(TrajectoryModel):
         nn.init.xavier_uniform_(self.film_gen[-1].weight, gain=1e-3)
         nn.init.zeros_(self.film_gen[-1].bias)
 
-        self.mu = nn.Sequential(
-                    nn.Linear(3*hidden_size, 2*hidden_size),
+        self.mu_2 = nn.Sequential(
+                    nn.Linear(3*hidden_size + self.act_dim, 2*hidden_size),
                     nn.GELU(),
                     nn.Linear(2*hidden_size, hidden_size),
                     nn.GELU(),
@@ -348,7 +348,6 @@ class DecisionTransformer(TrajectoryModel):
         return u_t, u_t_pred, mu, logvar, state_embeddings, returns_embeddings, h_flat
 
     def x0_reparameterize(self, h):
-        mu = self.mu(h)
         logvar = self.logvar(h).clamp(-5.0, 5.0)
         std = torch.exp(0.5 * logvar)
 
@@ -361,7 +360,9 @@ class DecisionTransformer(TrajectoryModel):
         eps = eps.mean(dim=0)
         eps = eps.clamp_(-2.5, 2.5)
 
-        z = mu + std * eps
+        std_eps = std * eps
+        mu = self.mu_2(torch.cat([h, std_eps.detach()], dim=-1))
+        z = mu + std_eps
         return z, mu, logvar
 
     def sensitivity(self, u, x):
