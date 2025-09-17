@@ -29,13 +29,14 @@ class Trainer:
         mu_h_flat_sensitivities = []
         mu_state_embeddings_sensitivities = []
         mu_returns_embeddings_sensitivities = []
+        mu_grad_norms = []
         logs = dict()
 
         train_start = time.time()
 
         self.model.train()
         for _ in range(num_steps):
-            train_loss, grad_norm, kl_loss, mu, logvar, mu_h_flat_sensitivity, mu_state_embeddings_sensitivity, mu_returns_embeddings_sensitivity = self.train_step(iter_num)
+            train_loss, grad_norm, kl_loss, mu, logvar, mu_h_flat_sensitivity, mu_state_embeddings_sensitivity, mu_returns_embeddings_sensitivity, mu_grad_norm = self.train_step(iter_num)
             train_losses.append(train_loss)
             grad_norms.append(grad_norm)
             kl_losses.append(kl_loss)
@@ -44,6 +45,7 @@ class Trainer:
             mu_h_flat_sensitivities.append(mu_h_flat_sensitivity)
             mu_state_embeddings_sensitivities.append(mu_state_embeddings_sensitivity)
             mu_returns_embeddings_sensitivities.append(mu_returns_embeddings_sensitivity)
+            mu_grad_norms.append(mu_grad_norm)
             if self.scheduler is not None:
                 self.scheduler.step()
 
@@ -68,7 +70,7 @@ class Trainer:
         logs['training/mu_sensitivity_h_flat_sensitivity_mean'] = np.mean(mu_h_flat_sensitivities)
         logs['training/mu_state_embeddings_sensitivity_mean'] = np.mean(mu_state_embeddings_sensitivities)
         logs['training/mu_returns_embeddings_sensitivity_mean'] = np.mean(mu_returns_embeddings_sensitivities)
-        
+        logs['training/mu_grad_norm_mean'] = np.mean(mu_grad_norms)
         for k in self.diagnostics:
             logs[k] = self.diagnostics[k]
 
