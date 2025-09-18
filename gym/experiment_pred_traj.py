@@ -646,7 +646,8 @@ def experiment(
     heads_lr = variant['learning_rate'] * 0.1
 
     if hasattr(model, 'mu_2') and hasattr(model, 'logvar'):
-        head_params = list(model.mu_2.named_parameters()) + list(model.logvar.named_parameters())
+        print("FLOW MATCHING MODULE LR IS DIFFERENT")
+        head_params = list(model.mu_2.named_parameters()) + list(model.logvar.named_parameters()) + list(model.embed_time.named_parameters()) + list(model.film_gen.named_parameters()) + list(model.embed_action_time.named_parameters()) + list(model.predict_velocity.named_parameters())
         head_decay, head_no_decay = [], []
         for n, p in head_params:
             if (n.endswith('bias') or p.dim() == 1):
@@ -771,7 +772,7 @@ if __name__ == '__main__':
     parser.add_argument('--n_head', type=int, default=12)
     parser.add_argument('--activation_function', type=str, default='gelu')
     parser.add_argument('--dropout', type=float, default=0.1)
-    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-5)
+    parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
     parser.add_argument('--weight_decay', '-wd', type=float, default=0.01)
     parser.add_argument('--warmup_steps', type=int, default=50000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
