@@ -172,7 +172,7 @@ class DecisionTransformer(TrajectoryModel):
                     nn.Linear(hidden_size, self.act_dim)
         )
         self.logvar = nn.Sequential(
-                    nn.Linear(3*hidden_size, 2*hidden_size),
+                    nn.Linear(3*hidden_size + self.act_dim, 2*hidden_size),
                     nn.GELU(),
                     nn.Linear(2*hidden_size, hidden_size),
                     nn.GELU(),
@@ -348,19 +348,19 @@ class DecisionTransformer(TrajectoryModel):
         return u_t, u_t_pred, mu, logvar, state_embeddings, returns_embeddings, h_flat
 
     def x0_reparameterize(self, h):
-        logvar = self.logvar(h).clamp(-5.0, 5.0)
-        std = torch.exp(0.5 * logvar)
-
-        # --- optional: epsilon clipping for early stability ---
         eps_list = []
         for i in range(10):
-            eps = torch.randn_like(std)
+            eps = torch.randn((h.shape[0], self.act_dim)).to(self.device)
             eps_list.append(eps)
         eps = torch.stack(eps_list, dim=0)
         eps = eps.mean(dim=0)
         eps = eps.clamp_(-2.5, 2.5)
 
+        logvar = self.logvar(torch.cat([h, eps], dim=-1)).clamp(-10.0, 10.0)
+        std = torch.exp(0.5 * logvar)
+
         std_eps = std * eps
+        
         mu = self.mu_2(torch.cat([h, std_eps.detach()], dim=-1))
         z = mu + std_eps
         return z, mu, logvar
