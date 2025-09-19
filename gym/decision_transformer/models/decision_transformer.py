@@ -360,8 +360,8 @@ class DecisionTransformer(TrajectoryModel):
         std = torch.exp(0.5 * logvar)
 
         std_eps = std * eps
-        
-        mu = self.mu_2(torch.cat([h, std_eps.detach()], dim=-1))
+
+        mu = self.mu_2(torch.cat([h, std_eps.detach()*10.0], dim=-1))
         z = mu + std_eps
         return z, mu, logvar
 
