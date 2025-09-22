@@ -308,11 +308,13 @@ class DecisionTransformer(TrajectoryModel):
             selected_indices = torch.randperm(self.max_length, device=self.device)[:self.max_length//3]
             mask_indices[i, selected_indices] = True
 
-        # Apply mask to actions - only keep actions where mask_indices is True
-        actions_flat = actions[mask_indices]
-        h_flat = tf_embeddings[mask_indices]
-        state_embeddings = state_embeddings[mask_indices]
-        returns_embeddings = returns_embeddings[mask_indices]
+        # Apply mask to actions - only keep actions where mask_indices is True AND attention_mask is True
+        # Combine mask_indices with attention_mask to exclude padded positions
+        valid_mask = mask_indices & attention_mask.bool()
+        actions_flat = actions[valid_mask]
+        h_flat = tf_embeddings[valid_mask]
+        state_embeddings = state_embeddings[valid_mask]
+        returns_embeddings = returns_embeddings[valid_mask]
         
         state_embeddings = self.drop_dense(state_embeddings)
         returns_embeddings = self.drop_dense(returns_embeddings)
