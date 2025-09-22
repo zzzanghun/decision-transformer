@@ -112,7 +112,7 @@ class DecisionTransformer(TrajectoryModel):
                 self.global_pool = ME.MinkowskiGlobalAvgPooling()
                 # latent_dim 벡터로 압축 및 복원 (dense linear 사용)
                 self.norm_global_pool = nn.LayerNorm(256)
-                self.drop_dense = nn.Dropout(0.1)
+                self.drop_dense = nn.Dropout(0.15)
                 self.fc_enc = nn.Linear(256, self.before_concat_hidden_size)
             self.embed_odom = nn.Sequential(
                 nn.Linear(odom_dim, 2 * self.before_concat_hidden_size),
