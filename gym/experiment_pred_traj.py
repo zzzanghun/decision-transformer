@@ -681,7 +681,7 @@ def experiment(
                 {'params': head_decay, 'weight_decay': variant['weight_decay'], 'lr': heads_lr},
                 {'params': head_no_decay, 'weight_decay': 0.0, 'lr': heads_lr},
             ],
-            betas=(0.9, 0.999), eps=1e-8
+            betas=(0.9, 0.98), eps=1e-5
         )
     else:
         optimizer = torch.optim.AdamW(
@@ -773,9 +773,9 @@ if __name__ == '__main__':
     parser.add_argument('--n_layer', type=int, default=10)
     parser.add_argument('--n_head', type=int, default=12)
     parser.add_argument('--activation_function', type=str, default='gelu')
-    parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--dropout', type=float, default=0.15)
     parser.add_argument('--learning_rate', '-lr', type=float, default=1e-4)
-    parser.add_argument('--weight_decay', '-wd', type=float, default=0.01)
+    parser.add_argument('--weight_decay', '-wd', type=float, default=0.001)
     parser.add_argument('--warmup_steps', type=int, default=50000)
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
