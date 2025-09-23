@@ -10,6 +10,8 @@ import pickle
 import random
 import sys
 import copy
+import shutil
+import glob
 
 from decision_transformer.evaluation.evaluate_episodes import evaluate_episode, evaluate_episode_rtg
 from decision_transformer.models.decision_transformer import DecisionTransformer
@@ -735,7 +737,16 @@ def experiment(
                 min_error = True
             else:
                 min_error = False
-            current_date = datetime.now().strftime('%Y-%m-%d')
+
+            # 이전 모델 폴더들 삭제 (wandb 업로드 후 로컬 저장공간 절약)
+            model_base_path = f"{PROJECT_PATH}/model/3d_end-to-end"
+            if os.path.exists(model_base_path):
+                existing_folders = glob.glob(os.path.join(model_base_path, "*"))
+                for folder in existing_folders:
+                    if os.path.isdir(folder):
+                        shutil.rmtree(folder)
+                        print(f"Deleted previous model folder: {folder}")
+
             folder_name = f"{PROJECT_PATH}/model/3d_end-to-end/{iter + 1}_{min_action_error:e}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
@@ -748,6 +759,14 @@ def experiment(
             print(f"Model saved at iteration {iter+1}")
             if log_to_wandb:
                 wandb.log_artifact(save_other_model_path, type='model')
+                # wandb 업로드 후 로컬 파일 삭제
+                if os.path.exists(save_other_model_path):
+                    os.remove(save_other_model_path)
+                    print(f"Local model file deleted after wandb upload: {save_other_model_path}")
+                # 빈 폴더도 삭제
+                if os.path.exists(folder_name) and not os.listdir(folder_name):
+                    os.rmdir(folder_name)
+                    print(f"Empty folder deleted: {folder_name}")
         if log_to_wandb:
             wandb.log(outputs)
 
