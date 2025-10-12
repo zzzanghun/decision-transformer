@@ -165,8 +165,8 @@ class TrajectoryDataset(Dataset):
         데이터셋을 로드하고 전처리합니다.
         """
         print(f"데이터셋 로드 중: {dataset_path}")
-        for i in range(1, 2):
-            dataset_path = f"/home/link/git/decision-transformer/gym/data/gpt_rtg_data_5.pkl"
+        for i in range(1, 6):
+            dataset_path = f"/home/link/git/decision-transformer/gym/data/gpt_rtg_data_{i}.pkl"
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
@@ -224,7 +224,7 @@ class TrajectoryDataset(Dataset):
                     ix = int(round(50 + (x - x0) * 10))
                     iy = int(round(50 + (y - y0) * 10))
                     if 0 <= ix < 100 and 0 <= iy < 100:
-                        obs_observation[ix, iy] = -1.0
+                        obs_observation[iy, ix] = -1.0  # NumPy array는 [row, col] = [y, x] 순서
 
                     traj_x = 50 + (x - x0) * 10
                     traj_y = 50 + (y - y0) * 10
@@ -232,8 +232,6 @@ class TrajectoryDataset(Dataset):
                     drone_info_observation.append(traj_y / 50.0)
 
                 rtg_value = episode['rtg'][j]
-
-                print(rtg_value, "@!!@@!!@@!@!")
 
                 drone_info_observation = np.array(drone_info_observation)
 
@@ -361,9 +359,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr, weight_decay=1e-4)
     else:
         optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=30, verbose=True
-    )
     
     # wandb 초기화
     wandb.init(project="reward-model-training", 
@@ -403,17 +398,17 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
             
             # MSE 손실 계산
             mse_loss = criterion(predicted_rtg, target_rtg)
-            
-            # L1 정규화 계산
-            l1_reg = 0
-            for param in model.parameters():
-                l1_reg += torch.sum(torch.abs(param))
-            
+
             # 총 손실 = MSE + L1 정규화
             if use_l1_regularization:
+                # L1 정규화 계산
+                l1_reg = 0
+                for param in model.parameters():
+                    l1_reg += torch.sum(torch.abs(param))
                 loss = mse_loss + (1e-6 * l1_reg)
             else:
                 loss = mse_loss
+                l1_reg = torch.tensor(0.0)  # wandb 로깅을 위해
             
             # 역전파 및 최적화
             loss.backward()
@@ -448,9 +443,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
         # 에폭 평균 검증 손실
         val_loss /= len(val_loader.dataset)
         val_losses.append(val_loss)
-        
-        # 학습률 스케줄러 업데이트
-        scheduler.step(val_loss)
 
         print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}, Train Loss: {math.sqrt(mse_loss):.6f}")
         
@@ -511,7 +503,7 @@ if __name__ == '__main__':
         train_dataloader, 
         val_dataloader, 
         epochs=1000000, 
-        lr=1e-5,
+        lr=1e-4,
         use_l1_regularization=False,
         use_l2_regularization=True
     )
