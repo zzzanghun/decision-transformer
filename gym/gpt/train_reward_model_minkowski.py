@@ -11,7 +11,6 @@ import copy
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
-import math
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_PATH)
 print(f"프로젝트 경로: {PROJECT_PATH}")
@@ -332,13 +331,13 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4, l1_lambda=1e-5, use_l1_regularization=True, use_l2_regularization=True):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, l1_lambda=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10):
     """
-    보상 모델 학습 함수
-    
+    이진 분류 모델 학습 함수 (0: 안전, 1: 효율)
+
     Parameters:
     -----------
-    model : RewardModel
+    model : RewardModelMinkowski
         학습할 모델
     train_loader : DataLoader
         학습 데이터로더
@@ -347,18 +346,27 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     epochs : int
         학습 에폭 수
     lr : float
-        학습률
+        최대 학습률
     l1_lambda : float
         L1 정규화 강도
+    warmup_epochs : int
+        Warmup 에폭 수
     """
     model.to(device)
-    
-    # 손실 함수 및 옵티마이저 설정
-    criterion = nn.MSELoss()
+
+    # 손실 함수 - Binary Cross Entropy with Logits (더 안정적)
+    criterion = nn.BCEWithLogitsLoss()
+
+    # 옵티마이저 설정 - AdamW 사용 (더 나은 정규화)
     if use_l2_regularization:
-        optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr, weight_decay=1e-4)
+        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, weight_decay=1e-3, betas=(0.9, 0.999))
     else:
-        optimizer = optim.Adam(model.get_trainable_parameters(), lr=lr)
+        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, betas=(0.9, 0.999))
+
+    # 학습률 스케줄러 - Cosine Annealing with Warmup
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=50, T_mult=2, eta_min=1e-6
+    )
     
     # wandb 초기화
     wandb.init(project="reward-model-training", 
@@ -376,12 +384,21 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
     train_losses = []
     val_losses = []
     best_val_loss = float('inf')
-    
+    best_val_acc = 0.0
+
     for epoch in range(epochs):
+        # Warmup learning rate
+        if epoch < warmup_epochs:
+            warmup_lr = lr * (epoch + 1) / warmup_epochs
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = warmup_lr
+
         # 학습 모드
         model.train()
         train_loss = 0.0
-        
+        train_correct = 0
+        train_total = 0
+
         # 학습 루프
         for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
             drone_info = batch['drone_info'].to(device)
@@ -394,36 +411,50 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
             optimizer.zero_grad()
 
             # 순전파
-            predicted_rtg = model(drone_info, obs)
-            
-            # MSE 손실 계산
-            mse_loss = criterion(predicted_rtg, target_rtg)
+            logits = model(drone_info, obs)
 
-            # 총 손실 = MSE + L1 정규화
+            # BCE with Logits 손실 계산
+            bce_loss = criterion(logits, target_rtg)
+
+            # 총 손실 = BCE + L1 정규화
             if use_l1_regularization:
                 # L1 정규화 계산
                 l1_reg = 0
                 for param in model.parameters():
                     l1_reg += torch.sum(torch.abs(param))
-                loss = mse_loss + (1e-6 * l1_reg)
+                loss = bce_loss + (l1_lambda * l1_reg)
             else:
-                loss = mse_loss
+                loss = bce_loss
                 l1_reg = torch.tensor(0.0)  # wandb 로깅을 위해
-            
+
             # 역전파 및 최적화
             loss.backward()
+            # Gradient clipping for stability
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
-            
+
+            # 정확도 계산
+            predictions = (torch.sigmoid(logits) > 0.5).float()
+            train_correct += (predictions == target_rtg).sum().item()
+            train_total += target_rtg.size(0)
+
             train_loss += loss.item() * drone_info.size(0)
         
-        # 에폭 평균 손실
+        # 에폭 평균 손실 및 정확도
         train_loss /= len(train_loader.dataset)
+        train_acc = train_correct / train_total
         train_losses.append(train_loss)
-        
+
+        # Learning rate scheduler step (after warmup)
+        if epoch >= warmup_epochs:
+            scheduler.step()
+
         # 검증 모드
         model.eval()
         val_loss = 0.0
-    
+        val_correct = 0
+        val_total = 0
+
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
                 drone_info = batch['drone_info'].to(device)
@@ -433,25 +464,33 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
                 target_rtg = batch['rtg'].to(device).unsqueeze(1)  # (B, 1)
 
                 # 순전파
-                predicted_rtg = model(drone_info, obs)
-                
+                logits = model(drone_info, obs)
+
                 # 손실 계산
-                loss = criterion(predicted_rtg, target_rtg)
-                
+                loss = criterion(logits, target_rtg)
+
+                # 정확도 계산
+                predictions = (torch.sigmoid(logits) > 0.5).float()
+                val_correct += (predictions == target_rtg).sum().item()
+                val_total += target_rtg.size(0)
+
                 val_loss += loss.item() * drone_info.size(0)
-        
-        # 에폭 평균 검증 손실
+
+        # 에폭 평균 검증 손실 및 정확도
         val_loss /= len(val_loader.dataset)
+        val_acc = val_correct / val_total
         val_losses.append(val_loss)
 
-        print(f"Epoch {epoch+1}/{epochs}, Val Loss: {math.sqrt(val_loss):.6f}, Train Loss: {math.sqrt(mse_loss):.6f}")
-        
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.6f}, Val Acc: {val_acc:.4f}")
+
         # wandb 로깅
         wandb.log({
             "epoch": epoch + 1,
-            "train_loss": math.sqrt(mse_loss),
-            "l1_reg": l1_reg.item(),
-            "val_loss": math.sqrt(val_loss),
+            "train_loss": train_loss,
+            "train_accuracy": train_acc,
+            "val_loss": val_loss,
+            "val_accuracy": val_acc,
+            "l1_reg": l1_reg.item() if use_l1_regularization else 0.0,
             "learning_rate": optimizer.param_groups[0]['lr']
         })
         
@@ -488,22 +527,31 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=1e-4,
 
 
 if __name__ == '__main__':
-    # 데이터로더 생성
-    train_dataloader, val_dataloader = get_dataloader(batch_size=64, train_ratio=0.8, load_data=False)
+    # 데이터로더 생성 - 배치 크기 증가로 안정적인 학습
+    train_dataloader, val_dataloader = get_dataloader(batch_size=128, train_ratio=0.8, load_data=False)
 
     sample_batch = next(iter(train_dataloader))
     drone_info_dim = sample_batch['drone_info'].shape[1]
     print(f"드론 정보 차원: {drone_info_dim}")
-    
-    reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=128)
-    
-    # 모델 학습
+
+    # 모델 생성 - latent_dim 증가로 표현력 향상
+    reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=256)
+
+    # 모델 파라미터 수 출력
+    total_params = sum(p.numel() for p in reward_model.parameters())
+    trainable_params = sum(p.numel() for p in reward_model.parameters() if p.requires_grad)
+    print(f"총 파라미터 수: {total_params:,}")
+    print(f"학습 가능한 파라미터 수: {trainable_params:,}")
+
+    # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
-        reward_model, 
-        train_dataloader, 
-        val_dataloader, 
-        epochs=1000000, 
-        lr=1e-4,
-        use_l1_regularization=False,
-        use_l2_regularization=True
+        reward_model,
+        train_dataloader,
+        val_dataloader,
+        epochs=1000000,
+        lr=3e-4,  # 더 높은 초기 학습률
+        l1_lambda=1e-5,
+        use_l1_regularization=False,  # L2만 사용
+        use_l2_regularization=True,
+        warmup_epochs=10  # Warmup 추가
     )

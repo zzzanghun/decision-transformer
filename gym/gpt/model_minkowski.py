@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 import numpy as np
 import MinkowskiEngine as ME
 
@@ -10,66 +9,66 @@ np.set_printoptions(threshold=np.inf, linewidth=10000)  # 무한대 대신 큰 �
 
 
 class RewardModelMinkowski(nn.Module):
-    def __init__(self, drone_info_dim=46, latent_dim=128):
+    def __init__(self, drone_info_dim=46, latent_dim=256):
         super(RewardModelMinkowski, self).__init__()
 
-        # 2D MinkowskiEngine 인코더
+        # 2D MinkowskiEngine 인코더 - BatchNorm 활성화하고 더 깊게
         self.encoder = nn.Sequential(
-            ME.MinkowskiConvolution(1, 32, kernel_size=3, stride=1, dimension=2),
-            # ME.MinkowskiBatchNorm(32),
+            ME.MinkowskiConvolution(1, 64, kernel_size=3, stride=1, dimension=2),
+            ME.MinkowskiBatchNorm(64),
             ME.MinkowskiReLU(inplace=True),
-            ME.MinkowskiDropout(0.1),
-
-            ME.MinkowskiConvolution(32, 64, kernel_size=3, stride=2, dimension=2),
-            # ME.MinkowskiBatchNorm(64),
-            ME.MinkowskiReLU(inplace=True),
-            ME.MinkowskiDropout(0.1),
 
             ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=2),
-            # ME.MinkowskiBatchNorm(128),
+            ME.MinkowskiBatchNorm(128),
             ME.MinkowskiReLU(inplace=True),
-            ME.MinkowskiDropout(0.1),
 
-            ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=1, dimension=2),
-            # ME.MinkowskiBatchNorm(256),
+            ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=2, dimension=2),
+            ME.MinkowskiBatchNorm(256),
             ME.MinkowskiReLU(inplace=True),
-            ME.MinkowskiDropout(0.1),
+
+            ME.MinkowskiConvolution(256, 512, kernel_size=3, stride=2, dimension=2),
+            ME.MinkowskiBatchNorm(512),
+            ME.MinkowskiReLU(inplace=True),
+            ME.MinkowskiDropout(0.1),  # 마지막에만 최소 dropout
         )
 
         self.global_pool = ME.MinkowskiGlobalAvgPooling()
-        self.norm_global_pool = nn.LayerNorm(256)
-        self.fc_enc = nn.Linear(256, 128)
+        self.global_max_pool = ME.MinkowskiGlobalMaxPooling()
 
-        # 드론 정보 인코더
+        # Global pooling 후 결합 (avg + max pooling)
+        self.fc_enc = nn.Sequential(
+            nn.Linear(1024, 512),  # 512 (avg) + 512 (max) = 1024
+            nn.ReLU(),
+            nn.Dropout(0.05),
+            nn.Linear(512, latent_dim)
+        )
+        self.obs_norm = nn.LayerNorm(latent_dim)
+
+        # 드론 정보 인코더 - 더 강력하게
         self.drone_info_encoder = nn.Sequential(
             nn.Linear(drone_info_dim, 256),
-            nn.GELU(),
-            nn.Linear(256, 128)
+            nn.ReLU(),
+            nn.Linear(256, 384),
+            nn.ReLU(),
+            nn.Dropout(0.05),
+            nn.Linear(384, latent_dim)
         )
+        self.drone_info_norm = nn.LayerNorm(latent_dim)
 
-        self.drone_info_norm = nn.LayerNorm(128)
-        self.obs_norm = nn.LayerNorm(128)
-
-        # 결합 및 보상 예측 레이어
-        self.reward_predictor = nn.Sequential(
-            nn.Linear(128 + 128, 512),
-            nn.GELU(),
-
-            nn.Linear(512, 256),
-            nn.GELU(),
-
+        # 결합 및 이진 분류 예측 레이어 - 더 깊고 강력하게
+        self.classifier = nn.Sequential(
+            nn.Linear(latent_dim * 2, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 384),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(384, 256),
+            nn.ReLU(),
             nn.Linear(256, 128),
-            nn.GELU(),
-
-            nn.Linear(128, 64),
-            nn.GELU(),
-
-            nn.Linear(64, 1),
-            nn.Sigmoid()
+            nn.ReLU(),
+            nn.Linear(128, 1)  # Sigmoid는 loss function에서 처리
         )
-
-        self.dropout = nn.Dropout(0.1)
-        self.batch_norm = nn.BatchNorm1d(128)
 
     def forward(self, drone_info, obs):
         """
@@ -78,7 +77,7 @@ class RewardModelMinkowski(nn.Module):
             obs: list of (coords, feats) for each batch item - 2D projection된 장애물 포인트클라우드
 
         Returns:
-            reward: (batch_size, 1) - 예측된 보상
+            logits: (batch_size, 1) - 이진 분류 로짓 (0: 안전, 1: 효율)
         """
         batch_size = drone_info.shape[0]
 
@@ -109,32 +108,32 @@ class RewardModelMinkowski(nn.Module):
         # 인코더 네트워크 통과
         x = self.encoder(sparse_tensor)
 
-        # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환
-        x = self.global_pool(x)
-        x = F.gelu(x.F)
+        # 글로벌 풀링으로 각 배치 항목을 고정 크기 벡터로 변환 (avg + max)
+        x_avg = self.global_pool(x)
+        x_max = self.global_max_pool(x)
 
-        # 최종 임베딩 생성 (batch_size, 128)
-        obstacles_embeddings = self.fc_enc(x)
+        # Avg와 Max pooling 결과 결합
+        x_combined = torch.cat([x_avg.F, x_max.F], dim=-1)
+
+        # 최종 임베딩 생성 (batch_size, latent_dim)
+        obstacles_embeddings = self.fc_enc(x_combined)
+        obstacles_embeddings = self.obs_norm(obstacles_embeddings)
 
         assert obstacles_embeddings.shape[0] == batch_size, \
             f"Expected batch_size {batch_size}, got {obstacles_embeddings.shape[0]}"
 
-        # 드론 정보 인코딩 (batch_size, 128)
+        # 드론 정보 인코딩 (batch_size, latent_dim)
         drone_info_features = self.drone_info_encoder(drone_info)
-
-        obstacles_embeddings = self.obs_norm(obstacles_embeddings)
         drone_info_features = self.drone_info_norm(drone_info_features)
 
-        drone_info_features = self.dropout(drone_info_features)
-
-        # 특성 결합 (batch_size, 128 + 128)
+        # 특성 결합 (batch_size, latent_dim * 2)
         combined_features = torch.cat([obstacles_embeddings, drone_info_features], dim=-1)
 
-        # 보상 예측 (batch_size, 1)
-        reward = self.reward_predictor(combined_features)
+        # 이진 분류 예측 (batch_size, 1)
+        logits = self.classifier(combined_features)
 
-        return reward
-    
+        return logits
+
     def get_trainable_parameters(self):
-        """학습 가능한 파라미터만 반환하는 메서드"""
-        return list(self.drone_info_encoder.parameters()) + list(self.reward_predictor.parameters())
+        """학습 가능한 파라미터만 반환하는 메서드 (전체 모델 학습)"""
+        return self.parameters()
