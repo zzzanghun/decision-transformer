@@ -341,7 +341,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, l1_lambda=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10, wandb_name=None):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, weight_decay=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10, wandb_name=None):
     """
     이진 분류 모델 학습 함수 (0: 안전, 1: 효율)
 
@@ -369,7 +369,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
 
     # 옵티마이저 설정 - AdamW 사용 (더 나은 정규화)
     if use_l2_regularization:
-        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, weight_decay=1e-3, betas=(0.9, 0.999))
+        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
     else:
         optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, betas=(0.9, 0.999))
 
@@ -614,7 +614,7 @@ if __name__ == '__main__':
     print(f"총 파라미터 수: {total_params:,}")
     print(f"학습 가능한 파라미터 수: {trainable_params:,}")
 
-    lr = 1e-7
+    lr = 1e-6
 
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
@@ -623,7 +623,7 @@ if __name__ == '__main__':
         val_dataloader,
         epochs=1000000,
         lr=lr,  # 더 높은 초기 학습률
-        l1_lambda=1e-5,
+        weight_decay=1e-2,
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
         warmup_epochs=500,  # Warmup 추가

@@ -22,9 +22,9 @@ class RewardModelMinkowski(nn.Module):
             ME.MinkowskiBatchNorm(128),
             ME.MinkowskiReLU(inplace=True),
 
-            ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=2, dimension=2),
-            ME.MinkowskiBatchNorm(256),
-            ME.MinkowskiReLU(inplace=True),
+            # ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=2, dimension=2),
+            # ME.MinkowskiBatchNorm(256),
+            # ME.MinkowskiReLU(inplace=True),
 
             # ME.MinkowskiConvolution(256, 512, kernel_size=3, stride=2, dimension=2),
             # ME.MinkowskiBatchNorm(512),
@@ -37,7 +37,7 @@ class RewardModelMinkowski(nn.Module):
 
         # Global pooling 후 결합 (avg + max pooling)
         self.fc_enc = nn.Sequential(
-            nn.Linear(512, 256),  # 512 (avg) + 512 (max) = 1024
+            nn.Linear(256, 256),  # 512 (avg) + 512 (max) = 1024
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(256, latent_dim)
