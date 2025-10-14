@@ -385,7 +385,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 "epochs": epochs,
                 "batch_size": train_loader.batch_size,
                 "learning_rate": lr,
-                "l1_lambda": l1_lambda,
+                "weight_decay": weight_decay,
                 "use_l1_regularization": use_l1_regularization,
                 "use_l2_regularization": use_l2_regularization
     })
