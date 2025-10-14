@@ -400,7 +400,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0=50, T_mult=2, eta_min=1e-6
     )
-    
+
     # wandb 초기화
     wandb.init(project="reward-model-training", 
                name=wandb_name,
@@ -412,7 +412,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 "use_l1_regularization": use_l1_regularization,
                 "use_l2_regularization": use_l2_regularization
     })
-    
+
     # 학습 기록
     train_losses = []
     val_losses = []
@@ -474,7 +474,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             train_total += target_rtg.size(0)
 
             train_loss += loss.item() * drone_info.size(0)
-        
+
         # 에폭 평균 손실 및 정확도
         train_loss /= len(train_loader.dataset)
         train_acc = train_correct / train_total
@@ -547,10 +547,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         # 최고 성능 모델 저장
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}"
+            folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}/reward_model_best.pth"
+            model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}/reward_model_best.pth"
             torch.save(model.state_dict(), model_save_path)
             print("최고 성능 모델 저장")
         
@@ -563,10 +563,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         #     torch.save(model.state_dict(), model_save_path)
     
     # 학습 완료 후 최종 모델 저장
-    folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}"
+    folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}"
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-    model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}/reward_model_final.pth"
+    model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}/reward_model_final.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"최종 모델 저장됨: {model_save_path}")
     
