@@ -561,6 +561,50 @@ if __name__ == '__main__':
     drone_info_dim = sample_batch['drone_info'].shape[1]
     print(f"드론 정보 차원: {drone_info_dim}")
 
+    # 전체 데이터셋 정보 출력
+    total_dataset_size = len(train_dataloader.dataset) + len(val_dataloader.dataset)
+    print(f"\n=== 데이터셋 정보 ===")
+    print(f"전체 데이터셋 크기: {total_dataset_size:,}")
+    print(f"Train 데이터셋 크기: {len(train_dataloader.dataset):,}")
+    print(f"Val 데이터셋 크기: {len(val_dataloader.dataset):,}")
+
+    # Train 데이터셋의 RTG 분포 계산
+    train_rtg_values = []
+    for batch in train_dataloader:
+        train_rtg_values.extend(batch['rtg'].numpy().tolist())
+    train_zeros = sum(1 for x in train_rtg_values if x == 0)
+    train_ones = sum(1 for x in train_rtg_values if x == 1)
+    train_total = len(train_rtg_values)
+
+    # 비율을 10으로 정규화
+    train_zero_normalized = (train_zeros / train_total) * 10
+    train_one_normalized = (train_ones / train_total) * 10
+
+    print(f"\n=== Train 데이터셋 RTG 분포 ===")
+    print(f"0 레이블: {train_zeros:,} ({train_zeros/train_total:.2%})")
+    print(f"1 레이블: {train_ones:,} ({train_ones/train_total:.2%})")
+    print(f"비율 (10 기준): {train_zero_normalized:.1f} : {train_one_normalized:.1f}")
+
+    # Val 데이터셋의 RTG 분포 계산
+    val_rtg_values = []
+    for batch in val_dataloader:
+        val_rtg_values.extend(batch['rtg'].numpy().tolist())
+    val_zeros = sum(1 for x in val_rtg_values if x == 0)
+    val_ones = sum(1 for x in val_rtg_values if x == 1)
+    val_total = len(val_rtg_values)
+
+    # 비율을 10으로 정규화
+    val_zero_normalized = (val_zeros / val_total) * 10
+    val_one_normalized = (val_ones / val_total) * 10
+
+    print(f"\n=== Val 데이터셋 RTG 분포 ===")
+    print(f"0 레이블: {val_zeros:,} ({val_zeros/val_total:.2%})")
+    print(f"1 레이블: {val_ones:,} ({val_ones/val_total:.2%})")
+    print(f"비율 (10 기준): {val_zero_normalized:.1f} : {val_one_normalized:.1f}")
+    print("=" * 40 + "\n")
+
+
+
     # 모델 생성 - latent_dim 증가로 표현력 향상
     reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=256)
 
