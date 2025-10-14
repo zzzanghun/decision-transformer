@@ -11,6 +11,8 @@ import copy
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
+import glob
+
 PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_PATH)
 print(f"프로젝트 경로: {PROJECT_PATH}")
@@ -161,7 +163,28 @@ class TrajectoryDataset(Dataset):
         """
         데이터셋을 로드하고 전처리합니다.
         """
-        for i in range(1, 6):
+        # 데이터 파일의 마지막 숫자 자동 파악
+        data_dir = "/home/link/git/decision-transformer/gym/data"
+        data_files = glob.glob(f"{data_dir}/gpt_rtg_data_*.pkl")
+
+        # 파일 이름에서 숫자 추출
+        file_numbers = []
+        for file in data_files:
+            try:
+                # 파일명에서 숫자 부분 추출 (예: gpt_rtg_data_5.pkl -> 5)
+                num = int(file.split('_')[-1].split('.')[0])
+                file_numbers.append(num)
+            except (ValueError, IndexError):
+                continue
+
+        if not file_numbers:
+            raise FileNotFoundError(f"No data files found in {data_dir}")
+
+        max_file_number = max(file_numbers)
+        print(f"발견된 데이터 파일: {sorted(file_numbers)}")
+        print(f"최대 파일 번호: {max_file_number}")
+
+        for i in range(1, max_file_number + 1):
             dataset_path = f"/home/link/git/decision-transformer/gym/data/gpt_rtg_data_{i}.pkl"
             print(f"데이터셋 로드 중: {dataset_path}")
             if i == 1:
