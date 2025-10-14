@@ -161,9 +161,9 @@ class TrajectoryDataset(Dataset):
         """
         데이터셋을 로드하고 전처리합니다.
         """
-        print(f"데이터셋 로드 중: {dataset_path}")
         for i in range(1, 6):
             dataset_path = f"/home/link/git/decision-transformer/gym/data/gpt_rtg_data_{i}.pkl"
+            print(f"데이터셋 로드 중: {dataset_path}")
             if i == 1:
                 with open(dataset_path, 'rb') as f:
                     trajectories = pickle.load(f)
