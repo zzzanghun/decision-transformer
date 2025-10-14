@@ -39,7 +39,7 @@ class RewardModelMinkowski(nn.Module):
         self.fc_enc = nn.Sequential(
             nn.Linear(512, 256),  # 512 (avg) + 512 (max) = 1024
             nn.ReLU(),
-            nn.Dropout(0.05),
+            nn.Dropout(0.1),
             nn.Linear(256, latent_dim)
         )
         self.obs_norm = nn.LayerNorm(latent_dim)
@@ -48,7 +48,7 @@ class RewardModelMinkowski(nn.Module):
         self.drone_info_encoder = nn.Sequential(
             nn.Linear(drone_info_dim, 256),
             nn.ReLU(),
-            nn.Dropout(0.05),
+            nn.Dropout(0.2),
             nn.Linear(256, latent_dim),
             # nn.ReLU(),
             # nn.Dropout(0.05),
@@ -60,7 +60,7 @@ class RewardModelMinkowski(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(latent_dim * 2, 256),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.2),
             nn.Linear(256, 1),
             # nn.ReLU(),
             # nn.Dropout(0.1),
