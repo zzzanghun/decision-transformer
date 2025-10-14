@@ -230,6 +230,9 @@ class TrajectoryDataset(Dataset):
 
                 rtg_value = episode['rtg'][j]
 
+                if int(rtg_value) not in [0, 1]:
+                    continue
+
                 drone_info_observation = np.array(drone_info_observation)
 
                 # MinkowskiEngine용 전처리: (coords, feats) 튜플로 변환
