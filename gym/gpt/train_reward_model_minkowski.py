@@ -489,8 +489,8 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 val_total += target_rtg.size(0)
 
                 # 0과 1의 개수 카운트
-                val_zeros += (target_rtg == 0).sum().item()
-                val_ones += (target_rtg == 1).sum().item()
+                val_zeros += (predictions == 0).sum().item()
+                val_ones += (predictions == 1).sum().item()
 
                 val_loss += loss.item() * drone_info.size(0)
 
@@ -513,9 +513,9 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             "train_accuracy": train_acc,
             "val_loss": val_loss,
             "val_accuracy": val_acc,
-            "val_zero_count": val_zeros,
-            "val_one_count": val_ones,
-            "val_zero_ratio": val_zero_ratio,
+            # "val_zero_count": val_zeros,
+            # "val_one_count": val_ones,
+            # "val_zero_ratio": val_zero_ratio,
             "val_one_ratio": val_one_ratio,
             "l1_reg": l1_reg.item() if use_l1_regularization else 0.0,
             "learning_rate": optimizer.param_groups[0]['lr']
@@ -614,7 +614,7 @@ if __name__ == '__main__':
     print(f"총 파라미터 수: {total_params:,}")
     print(f"학습 가능한 파라미터 수: {trainable_params:,}")
 
-    lr = 1e-6
+    lr = 1e-7
 
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
