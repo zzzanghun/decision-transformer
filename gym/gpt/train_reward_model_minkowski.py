@@ -341,7 +341,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, l1_lambda=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, l1_lambda=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10, wandb_name=None):
     """
     이진 분류 모델 학습 함수 (0: 안전, 1: 효율)
 
@@ -380,7 +380,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
     
     # wandb 초기화
     wandb.init(project="reward-model-training", 
-               name=f"use_l1={use_l1_regularization}, use_l2={use_l2_regularization}, batch_size={train_loader.batch_size}",
+               name=wandb_name,
                config={
                 "epochs": epochs,
                 "batch_size": train_loader.batch_size,
@@ -466,6 +466,8 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         val_loss = 0.0
         val_correct = 0
         val_total = 0
+        val_zeros = 0  # 0 레이블 개수
+        val_ones = 0   # 1 레이블 개수
 
         with torch.no_grad():
             for batch in tqdm(val_loader, desc=f"Epoch {epoch+1}/{epochs} [Val]"):
@@ -486,6 +488,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 val_correct += (predictions == target_rtg).sum().item()
                 val_total += target_rtg.size(0)
 
+                # 0과 1의 개수 카운트
+                val_zeros += (target_rtg == 0).sum().item()
+                val_ones += (target_rtg == 1).sum().item()
+
                 val_loss += loss.item() * drone_info.size(0)
 
         # 에폭 평균 검증 손실 및 정확도
@@ -493,7 +499,12 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         val_acc = val_correct / val_total
         val_losses.append(val_loss)
 
+        # 0과 1의 비율 계산
+        val_zero_ratio = val_zeros / val_total if val_total > 0 else 0.0
+        val_one_ratio = val_ones / val_total if val_total > 0 else 0.0
+
         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}, Train Acc: {train_acc:.4f}, Val Loss: {val_loss:.6f}, Val Acc: {val_acc:.4f}")
+        print(f"Val Label Distribution - 0: {val_zeros} ({val_zero_ratio:.2%}), 1: {val_ones} ({val_one_ratio:.2%})")
 
         # wandb 로깅
         wandb.log({
@@ -502,6 +513,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             "train_accuracy": train_acc,
             "val_loss": val_loss,
             "val_accuracy": val_acc,
+            "val_zero_count": val_zeros,
+            "val_one_count": val_ones,
+            "val_zero_ratio": val_zero_ratio,
+            "val_one_ratio": val_one_ratio,
             "l1_reg": l1_reg.item() if use_l1_regularization else 0.0,
             "learning_rate": optimizer.param_groups[0]['lr']
         })
@@ -509,26 +524,26 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         # 최고 성능 모델 저장
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
+            folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_best.pth"
+            model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}/reward_model_best.pth"
             torch.save(model.state_dict(), model_save_path)
             print("최고 성능 모델 저장")
         
         # 주기적으로 모델 저장
-        if (epoch + 1) % 100 == 0:
-            folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_epoch_{epoch+1}.pth"
-            torch.save(model.state_dict(), model_save_path)
+        # if (epoch + 1) % 100 == 0:
+        #     folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
+        #     if not os.path.exists(folder_name):
+        #         os.makedirs(folder_name)
+        #     model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_epoch_{epoch+1}.pth"
+        #     torch.save(model.state_dict(), model_save_path)
     
     # 학습 완료 후 최종 모델 저장
-    folder_name = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}"
+    folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}"
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-    model_save_path = f"{PROJECT_PATH}/model/reward_model_l1_{use_l1_regularization}_l2_{use_l2_regularization}_batch_size_{train_loader.batch_size}/reward_model_final.pth"
+    model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{optimizer.param_groups[0]['lr']}/reward_model_final.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"최종 모델 저장됨: {model_save_path}")
     
@@ -540,7 +555,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
 
 if __name__ == '__main__':
     # 데이터로더 생성 - 배치 크기 증가로 안정적인 학습
-    train_dataloader, val_dataloader = get_dataloader(batch_size=128, train_ratio=0.8, load_data=False)
+    train_dataloader, val_dataloader = get_dataloader(batch_size=128, train_ratio=0.9, load_data=False)
 
     sample_batch = next(iter(train_dataloader))
     drone_info_dim = sample_batch['drone_info'].shape[1]
@@ -555,15 +570,18 @@ if __name__ == '__main__':
     print(f"총 파라미터 수: {total_params:,}")
     print(f"학습 가능한 파라미터 수: {trainable_params:,}")
 
+    lr = 1e-6
+
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
         reward_model,
         train_dataloader,
         val_dataloader,
         epochs=1000000,
-        lr=1e-6,  # 더 높은 초기 학습률
+        lr=lr,  # 더 높은 초기 학습률
         l1_lambda=1e-5,
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
-        warmup_epochs=500  # Warmup 추가
+        warmup_epochs=500,  # Warmup 추가
+        wandb_name=f"lr={lr}"
     )
