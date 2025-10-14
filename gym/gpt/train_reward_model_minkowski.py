@@ -446,7 +446,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             optimizer.step()
 
             # 정확도 계산
-            predictions = (torch.sigmoid(logits) > 0.5).float()
+            predictions = (torch.sigmoid(logits) > 0.8).float()
             train_correct += (predictions == target_rtg).sum().item()
             train_total += target_rtg.size(0)
 
@@ -484,7 +484,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 loss = criterion(logits, target_rtg)
 
                 # 정확도 계산
-                predictions = (torch.sigmoid(logits) > 0.5).float()
+                predictions = (torch.sigmoid(logits) > 0.8).float()
                 val_correct += (predictions == target_rtg).sum().item()
                 val_total += target_rtg.size(0)
 
