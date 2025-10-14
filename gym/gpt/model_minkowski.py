@@ -26,9 +26,9 @@ class RewardModelMinkowski(nn.Module):
             ME.MinkowskiBatchNorm(256),
             ME.MinkowskiReLU(inplace=True),
 
-            ME.MinkowskiConvolution(256, 512, kernel_size=3, stride=2, dimension=2),
-            ME.MinkowskiBatchNorm(512),
-            ME.MinkowskiReLU(inplace=True),
+            # ME.MinkowskiConvolution(256, 512, kernel_size=3, stride=2, dimension=2),
+            # ME.MinkowskiBatchNorm(512),
+            # ME.MinkowskiReLU(inplace=True),
             ME.MinkowskiDropout(0.1),  # 마지막에만 최소 dropout
         )
 
@@ -37,10 +37,10 @@ class RewardModelMinkowski(nn.Module):
 
         # Global pooling 후 결합 (avg + max pooling)
         self.fc_enc = nn.Sequential(
-            nn.Linear(1024, 512),  # 512 (avg) + 512 (max) = 1024
+            nn.Linear(512, 256),  # 512 (avg) + 512 (max) = 1024
             nn.ReLU(),
             nn.Dropout(0.05),
-            nn.Linear(512, latent_dim)
+            nn.Linear(256, latent_dim)
         )
         self.obs_norm = nn.LayerNorm(latent_dim)
 
@@ -48,26 +48,27 @@ class RewardModelMinkowski(nn.Module):
         self.drone_info_encoder = nn.Sequential(
             nn.Linear(drone_info_dim, 256),
             nn.ReLU(),
-            nn.Linear(256, 384),
-            nn.ReLU(),
             nn.Dropout(0.05),
-            nn.Linear(384, latent_dim)
+            nn.Linear(256, latent_dim),
+            # nn.ReLU(),
+            # nn.Dropout(0.05),
+            # nn.Linear(384, latent_dim)
         )
         self.drone_info_norm = nn.LayerNorm(latent_dim)
 
         # 결합 및 이진 분류 예측 레이어 - 더 깊고 강력하게
         self.classifier = nn.Sequential(
-            nn.Linear(latent_dim * 2, 512),
+            nn.Linear(latent_dim * 2, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(512, 384),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(384, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)  # Sigmoid는 loss function에서 처리
+            nn.Linear(256, 1),
+            # nn.ReLU(),
+            # nn.Dropout(0.1),
+            # nn.Linear(384, 256),
+            # nn.ReLU(),
+            # nn.Linear(256, 128),
+            # nn.ReLU(),
+            # nn.Linear(128, 1)  # Sigmoid는 loss function에서 처리
         )
 
     def forward(self, drone_info, obs):
@@ -75,6 +76,7 @@ class RewardModelMinkowski(nn.Module):
         Args:
             drone_info: (batch_size, drone_info_dim) - 드론 정보
             obs: list of (coords, feats) for each batch item - 2D projection된 장애물 포인트클라우드
+                 coords는 이미 배치 인덱스가 포함된 (N_points, 3) - [batch_idx, y, x] 형태
 
         Returns:
             logits: (batch_size, 1) - 이진 분류 로짓 (0: 안전, 1: 효율)
@@ -86,12 +88,9 @@ class RewardModelMinkowski(nn.Module):
 
         for b in range(batch_size):
             # obs[b]는 (coords, feats) 튜플
-            coords = obs[b][0]  # 좌표 (N_points, 3) - [batch_idx, y, x] (2D)
+            coords = obs[b][0]  # 좌표 (N_points, 3) - [batch_idx, y, x] (2D) - 이미 배치 인덱스 포함
             feats = obs[b][1]   # 특성 (N_points, 1)
 
-            # 배치 인덱스 설정 (중요: MinkowskiEngine에서 배치를 구분하기 위함)
-            coords = coords.clone()
-            coords[:, 0] = int(b)
             coords_list.append(coords)
             feats_list.append(feats)
 

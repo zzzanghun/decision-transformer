@@ -43,7 +43,7 @@ def preprocessing_obs_for_minkowski_2d(obs_observation):
         obs_observation: (100, 100) numpy array - 2D projection된 장애물 맵
 
     Returns:
-        coords: torch.Tensor (N, 3) - [batch_idx, y, x] 형식의 좌표
+        coords: torch.Tensor (N, 2) - [y, x] 형식의 좌표 (batch_idx는 collate_fn에서 추가)
         feats: torch.Tensor (N, 1) - 각 좌표의 특성값
     """
     assert obs_observation.shape == (100, 100), f"Expected shape (100, 100), got {obs_observation.shape}"
@@ -57,9 +57,7 @@ def preprocessing_obs_for_minkowski_2d(obs_observation):
         coords = np.zeros((1, 2), dtype=np.int32)
         feats = np.zeros((1, 1), dtype=np.float32)
 
-    # batch_idx 추가 (배치 처리를 위해 - 나중에 모델에서 재설정됨)
-    batch_idx = np.zeros((coords.shape[0], 1), dtype=np.int32)
-    coords = np.hstack((batch_idx, coords)).astype(np.int32)  # (N, 3) - [batch_idx, y, x]
+    coords = coords.astype(np.int32)  # (N, 2) - [y, x]
 
     # CPU에서 텐서로 변환 (나중에 모델에서 device로 이동)
     return torch.tensor(coords, dtype=torch.int32), torch.tensor(feats, dtype=torch.float32)
@@ -268,7 +266,7 @@ class TrajectoryDataset(Dataset):
 def collate_fn(batch):
     """
     DataLoader를 위한 커스텀 collate 함수
-    obs가 (coords, feats) 튜플 리스트로 유지되도록 처리
+    obs가 (coords, feats) 튜플 리스트로 유지되도록 처리하며, 각 샘플에 배치 인덱스를 추가
 
     Parameters:
     -----------
@@ -281,12 +279,21 @@ def collate_fn(batch):
         배치 데이터 딕셔너리
     """
     drone_info = torch.stack([item['drone_info'] for item in batch])
-    obs = [item['obs'] for item in batch]  # list of (coords, feats) tuples
+
+    # obs에 배치 인덱스 추가
+    obs_with_batch_idx = []
+    for batch_idx, item in enumerate(batch):
+        coords, feats = item['obs']  # (N, 2), (N, 1)
+        # 배치 인덱스를 coords의 첫 번째 열에 추가
+        batch_idx_col = torch.full((coords.shape[0], 1), batch_idx, dtype=torch.int32)
+        coords_with_batch = torch.cat([batch_idx_col, coords], dim=1)  # (N, 3) - [batch_idx, y, x]
+        obs_with_batch_idx.append((coords_with_batch, feats))
+
     rtg = torch.stack([item['rtg'] for item in batch])
 
     return {
         'drone_info': drone_info,
-        'obs': obs,
+        'obs': obs_with_batch_idx,
         'rtg': rtg
     }
 
@@ -407,6 +414,8 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             obs = [(coords.to(device), feats.to(device)) for coords, feats in obs]
             target_rtg = batch['rtg'].to(device).unsqueeze(1)  # (B, 1)
 
+            assert torch.all((target_rtg == 0) | (target_rtg == 1)), f"target_rtg 값이 0 또는 1이 아님: {target_rtg}"
+
             # 그래디언트 초기화
             optimizer.zero_grad()
 
@@ -446,8 +455,8 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         train_losses.append(train_loss)
 
         # Learning rate scheduler step (after warmup)
-        if epoch >= warmup_epochs:
-            scheduler.step()
+        # if epoch >= warmup_epochs:
+        #     scheduler.step()
 
         # 검증 모드
         model.eval()
@@ -549,9 +558,9 @@ if __name__ == '__main__':
         train_dataloader,
         val_dataloader,
         epochs=1000000,
-        lr=3e-4,  # 더 높은 초기 학습률
+        lr=1e-6,  # 더 높은 초기 학습률
         l1_lambda=1e-5,
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
-        warmup_epochs=10  # Warmup 추가
+        warmup_epochs=500  # Warmup 추가
     )
