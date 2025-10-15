@@ -143,19 +143,22 @@ class TrajectoryDataset(Dataset):
     """
     궤적 데이터를 처리하는 Dataset 클래스
     """
-    def __init__(self, dataset_path=None, load_data=False):
+    def __init__(self, dataset_path=None, load_data=False, use_augmentation=False):
         """
         Parameters:
         -----------
         dataset_path : str
             데이터셋 경로
+        use_augmentation : bool
+            데이터 증강 사용 여부 (train set에만 적용)
         """
         if dataset_path is None:
             dataset_path = f'/home/link/git/decision-transformer/gym/data/gpt_rtg_data_5.pkl'
-        
+
         self.drone_info_data = []
-        self.obs_data = []
+        self.obs_data = []  # 원본 obs_observation (numpy array) 저장
         self.rtg_data = []
+        self.use_augmentation = use_augmentation
 
         self._load_data(dataset_path)
     
@@ -258,29 +261,9 @@ class TrajectoryDataset(Dataset):
 
                 drone_info_observation = np.array(drone_info_observation)
 
-                # 데이터 증강: 원본 + dropping + add noise
-                # 1. 원본 데이터 추가
-                coords_original, feats_original = preprocessing_obs_for_minkowski_2d(obs_observation)
+                # 원본 데이터만 저장 (증강은 __getitem__에서 동적으로 적용)
                 self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                self.obs_data.append((coords_original, feats_original))
-                self.rtg_data.append(copy.deepcopy(rtg_value))
-
-                # 2. Dropping 증강 (0.2 확률로 각 요소를 0으로 변경)
-                obs_dropping = obs_observation.copy()
-                drop_mask = np.random.random(obs_dropping.shape) < 0.2
-                obs_dropping[drop_mask] = 0
-                coords_dropping, feats_dropping = preprocessing_obs_for_minkowski_2d(obs_dropping)
-                self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                self.obs_data.append((coords_dropping, feats_dropping))
-                self.rtg_data.append(copy.deepcopy(rtg_value))
-
-                # 3. Add noise 증강 (0.2 확률로 각 요소를 1로 변경)
-                obs_add_noise = obs_observation.copy()
-                add_mask = np.random.random(obs_add_noise.shape) < 0.2
-                obs_add_noise[add_mask] = 1
-                coords_add_noise, feats_add_noise = preprocessing_obs_for_minkowski_2d(obs_add_noise)
-                self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                self.obs_data.append((coords_add_noise, feats_add_noise))
+                self.obs_data.append(copy.deepcopy(obs_observation))  # numpy array 저장
                 self.rtg_data.append(copy.deepcopy(rtg_value))
 
         # data = {
@@ -295,14 +278,32 @@ class TrajectoryDataset(Dataset):
     def __getitem__(self, idx):
         """
         데이터셋의 idx번째 샘플을 반환합니다.
+        증강이 활성화된 경우, 매번 다른 증강을 적용합니다.
         """
         drone_info = torch.tensor(self.drone_info_data[idx], dtype=torch.float32)
-        obs = self.obs_data[idx]  # (coords, feats) 튜플 - 이미 전처리됨
+        obs_observation = self.obs_data[idx].copy()  # numpy array
         rtg = torch.tensor(self.rtg_data[idx], dtype=torch.float32)
+
+        # 데이터 증강이 활성화된 경우, 랜덤하게 증강 타입 선택
+        if self.use_augmentation:
+            aug_type = np.random.choice(['original', 'dropping', 'add_noise'])
+
+            if aug_type == 'dropping':
+                # 0.2 확률로 각 요소를 0으로 변경
+                drop_mask = np.random.random(obs_observation.shape) < 0.2
+                obs_observation[drop_mask] = 0
+            elif aug_type == 'add_noise':
+                # 0.2 확률로 각 요소를 1로 변경
+                add_mask = np.random.random(obs_observation.shape) < 0.2
+                obs_observation[add_mask] = 1
+            # 'original'인 경우 그대로 사용
+
+        # MinkowskiEngine용 전처리
+        coords, feats = preprocessing_obs_for_minkowski_2d(obs_observation)
 
         return {
             'drone_info': drone_info,
-            'obs': obs,
+            'obs': (coords, feats),
             'rtg': rtg
         }
 
@@ -341,7 +342,30 @@ def collate_fn(batch):
         'rtg': rtg
     }
 
-def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False):
+class AugmentedSubset(torch.utils.data.Dataset):
+    """
+    Subset에 증강 플래그를 적용할 수 있는 래퍼 클래스
+    """
+    def __init__(self, dataset, indices, use_augmentation):
+        self.dataset = dataset
+        self.indices = indices
+        # 원본 데이터셋의 증강 플래그를 오버라이드
+        self.original_augmentation = dataset.use_augmentation
+        self.use_augmentation = use_augmentation
+
+    def __getitem__(self, idx):
+        # 일시적으로 증강 플래그 변경
+        original_flag = self.dataset.use_augmentation
+        self.dataset.use_augmentation = self.use_augmentation
+        item = self.dataset[self.indices[idx]]
+        self.dataset.use_augmentation = original_flag
+        return item
+
+    def __len__(self):
+        return len(self.indices)
+
+
+def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False, use_augmentation=True):
     """
     데이터로더를 생성하여 반환합니다.
 
@@ -353,23 +377,31 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
         데이터 셔플 여부
     train_ratio : float
         학습 데이터 비율
+    use_augmentation : bool
+        train set에 데이터 증강 사용 여부
 
     Returns:
     --------
     tuple
         (train_dataloader, val_dataloader)
     """
-    dataset = TrajectoryDataset(load_data=load_data)
+    # 데이터셋을 한 번만 로드 (증강은 나중에 설정)
+    dataset = TrajectoryDataset(load_data=load_data, use_augmentation=False)
 
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
     val_size = len(dataset) - train_size
-    print(f"dataset 길이: {len(dataset)}")
-    print(f"train_size: {train_size}, val_size: {val_size}")
     generator = torch.Generator().manual_seed(50)
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size], generator=generator
+    train_indices, val_indices = torch.utils.data.random_split(
+        range(len(dataset)), [train_size, val_size], generator=generator
     )
+
+    # Train과 Val용 Subset 생성 (각각 다른 증강 설정)
+    train_dataset = AugmentedSubset(dataset, train_indices.indices, use_augmentation=use_augmentation)
+    val_dataset = AugmentedSubset(dataset, val_indices.indices, use_augmentation=False)
+
+    print(f"Train set 증강 활성화: {use_augmentation}")
+    print(f"Val set 증강 활성화: False (항상 원본 데이터 사용)")
 
     train_dataloader = DataLoader(
         train_dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=collate_fn
@@ -476,17 +508,6 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             # BCE with Logits 손실 계산
             bce_loss = criterion(logits, target_rtg)
 
-            # 총 손실 = BCE + L1 정규화
-            if use_l1_regularization:
-                # L1 정규화 계산
-                l1_reg = 0
-                for param in model.parameters():
-                    l1_reg += torch.sum(torch.abs(param))
-                loss = bce_loss + (l1_lambda * l1_reg)
-            else:
-                loss = bce_loss
-                l1_reg = torch.tensor(0.0)  # wandb 로깅을 위해
-
             # 역전파 및 최적화
             loss.backward()
             # Gradient clipping for stability
@@ -494,7 +515,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             optimizer.step()
 
             # 정확도 계산
-            predictions = (torch.sigmoid(logits) > 0.8).float()
+            predictions = (torch.sigmoid(logits) > 0.5).float()
             train_correct += (predictions == target_rtg).sum().item()
             train_total += target_rtg.size(0)
 
@@ -532,7 +553,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 loss = criterion(logits, target_rtg)
 
                 # 정확도 계산
-                predictions = (torch.sigmoid(logits) > 0.8).float()
+                predictions = (torch.sigmoid(logits) > 0.5).float()
                 val_correct += (predictions == target_rtg).sum().item()
                 val_total += target_rtg.size(0)
 
@@ -565,7 +586,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             # "val_one_count": val_ones,
             # "val_zero_ratio": val_zero_ratio,
             "val_one_ratio": val_one_ratio,
-            "l1_reg": l1_reg.item() if use_l1_regularization else 0.0,
+            # "l1_reg": l1_reg.item() if use_l1_regularization else 0.0,
             "learning_rate": optimizer.param_groups[0]['lr']
         })
         
@@ -603,7 +624,13 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
 
 if __name__ == '__main__':
     # 데이터로더 생성 - 배치 크기 증가로 안정적인 학습
-    train_dataloader, val_dataloader = get_dataloader(batch_size=128, train_ratio=0.9, load_data=False)
+    # use_augmentation=True: train set에 동적 데이터 증강 적용
+    train_dataloader, val_dataloader = get_dataloader(
+        batch_size=128,
+        train_ratio=0.8,
+        load_data=False,
+        use_augmentation=True
+    )
 
     sample_batch = next(iter(train_dataloader))
     drone_info_dim = sample_batch['drone_info'].shape[1]
@@ -665,15 +692,15 @@ if __name__ == '__main__':
     lr = 1e-5
 
     # 클래스 불균형 처리를 위한 pos_weight 계산
-    # pos_weight = (0의 개수) / (1의 개수)
-    # 현재 비율이 3:7 (0:1) 이므로 pos_weight = 3/7 = 0.4286
-    # 하지만 BCEWithLogitsLoss는 클래스 1에 대한 가중치를 요구하므로
-    # 클래스 0이 소수 클래스라면 pos_weight = 7/3 = 2.333
-    pos_weight_value = train_ones / train_zeros  # 1의 개수 / 0의 개수
+    # pos_weight는 클래스 1(양성 클래스)에 대한 가중치입니다.
+    # 현재 비율이 3:7 (0:1) 이므로 클래스 0이 소수 클래스입니다.
+    # 소수 클래스(0)를 더 중요하게 여기려면, 클래스 1의 가중치를 낮춰야 합니다.
+    # pos_weight = (0의 개수) / (1의 개수) = 3/7 = 0.4286
+    pos_weight_value = train_zeros / train_ones  # 0의 개수 / 1의 개수
     pos_weight = torch.tensor([pos_weight_value], dtype=torch.float32)
     print(f"\n클래스 가중치 설정:")
     print(f"pos_weight (클래스 1에 대한 가중치): {pos_weight_value:.4f}")
-    print(f"이는 클래스 0이 클래스 1보다 {pos_weight_value:.2f}배 더 중요하게 취급됨을 의미합니다.\n")
+    print(f"클래스 0 개수: {train_zeros:,}, 클래스 1 개수: {train_ones:,}\n")
 
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
