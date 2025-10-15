@@ -506,7 +506,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             logits = model(drone_info, obs)
 
             # BCE with Logits 손실 계산
-            bce_loss = criterion(logits, target_rtg)
+            loss = criterion(logits, target_rtg)
 
             # 역전파 및 최적화
             loss.backward()
