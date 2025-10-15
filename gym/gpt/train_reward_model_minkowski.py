@@ -258,11 +258,29 @@ class TrajectoryDataset(Dataset):
 
                 drone_info_observation = np.array(drone_info_observation)
 
-                # MinkowskiEngine용 전처리: (coords, feats) 튜플로 변환
-                coords, feats = preprocessing_obs_for_minkowski_2d(obs_observation)
-
+                # 데이터 증강: 원본 + dropping + add noise
+                # 1. 원본 데이터 추가
+                coords_original, feats_original = preprocessing_obs_for_minkowski_2d(obs_observation)
                 self.drone_info_data.append(copy.deepcopy(drone_info_observation))
-                self.obs_data.append((coords, feats))  # 전처리된 (coords, feats) 튜플 저장
+                self.obs_data.append((coords_original, feats_original))
+                self.rtg_data.append(copy.deepcopy(rtg_value))
+
+                # 2. Dropping 증강 (0.2 확률로 각 요소를 0으로 변경)
+                obs_dropping = obs_observation.copy()
+                drop_mask = np.random.random(obs_dropping.shape) < 0.2
+                obs_dropping[drop_mask] = 0
+                coords_dropping, feats_dropping = preprocessing_obs_for_minkowski_2d(obs_dropping)
+                self.drone_info_data.append(copy.deepcopy(drone_info_observation))
+                self.obs_data.append((coords_dropping, feats_dropping))
+                self.rtg_data.append(copy.deepcopy(rtg_value))
+
+                # 3. Add noise 증강 (0.2 확률로 각 요소를 1로 변경)
+                obs_add_noise = obs_observation.copy()
+                add_mask = np.random.random(obs_add_noise.shape) < 0.2
+                obs_add_noise[add_mask] = 1
+                coords_add_noise, feats_add_noise = preprocessing_obs_for_minkowski_2d(obs_add_noise)
+                self.drone_info_data.append(copy.deepcopy(drone_info_observation))
+                self.obs_data.append((coords_add_noise, feats_add_noise))
                 self.rtg_data.append(copy.deepcopy(rtg_value))
 
         # data = {
@@ -554,10 +572,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         # 최고 성능 모델 저장
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}"
+            folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{wandb_name}"
             if not os.path.exists(folder_name):
                 os.makedirs(folder_name)
-            model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}/reward_model_best.pth"
+            model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{wandb_name}/reward_model_best.pth"
             torch.save(model.state_dict(), model_save_path)
             print("최고 성능 모델 저장")
         
@@ -570,10 +588,10 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         #     torch.save(model.state_dict(), model_save_path)
     
     # 학습 완료 후 최종 모델 저장
-    folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}"
+    folder_name = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{wandb_name}"
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-    model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{lr}/reward_model_final.pth"
+    model_save_path = f"{PROJECT_PATH}/model/minkowski_reward_model_lr_{wandb_name}/reward_model_final.pth"
     torch.save(model.state_dict(), model_save_path)
     print(f"최종 모델 저장됨: {model_save_path}")
     
@@ -636,7 +654,7 @@ if __name__ == '__main__':
 
 
     # 모델 생성 - latent_dim 증가로 표현력 향상
-    reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=256)
+    reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=128)
 
     # 모델 파라미터 수 출력
     total_params = sum(p.numel() for p in reward_model.parameters())
@@ -644,7 +662,7 @@ if __name__ == '__main__':
     print(f"총 파라미터 수: {total_params:,}")
     print(f"학습 가능한 파라미터 수: {trainable_params:,}")
 
-    lr = 1e-6
+    lr = 1e-5
 
     # 클래스 불균형 처리를 위한 pos_weight 계산
     # pos_weight = (0의 개수) / (1의 개수)
@@ -664,10 +682,10 @@ if __name__ == '__main__':
         val_dataloader,
         epochs=1000000,
         lr=lr,  # 더 높은 초기 학습률
-        weight_decay=1e-2,
+        weight_decay=1e-3,
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
-        warmup_epochs=500,  # Warmup 추가
+        warmup_epochs=10,  # Warmup 추가
         wandb_name=f"lr={lr}",
         pos_weight=pos_weight  # 클래스 가중치 추가
     )

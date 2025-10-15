@@ -15,21 +15,24 @@ class RewardModelMinkowski(nn.Module):
         # 2D MinkowskiEngine 인코더 - BatchNorm 활성화하고 더 깊게
         self.encoder = nn.Sequential(
             ME.MinkowskiConvolution(1, 64, kernel_size=3, stride=1, dimension=2),
-            ME.MinkowskiBatchNorm(64),
+            # ME.MinkowskiBatchNorm(64),
             ME.MinkowskiReLU(inplace=True),
+            ME.MinkowskiDropout(0.1), 
 
             ME.MinkowskiConvolution(64, 128, kernel_size=3, stride=2, dimension=2),
-            ME.MinkowskiBatchNorm(128),
+            # ME.MinkowskiBatchNorm(128),
             ME.MinkowskiReLU(inplace=True),
+            ME.MinkowskiDropout(0.1), 
 
             ME.MinkowskiConvolution(128, 256, kernel_size=3, stride=2, dimension=2),
-            ME.MinkowskiBatchNorm(256),
+            # ME.MinkowskiBatchNorm(256),
             ME.MinkowskiReLU(inplace=True),
+            ME.MinkowskiDropout(0.1),
 
             # ME.MinkowskiConvolution(256, 512, kernel_size=3, stride=2, dimension=2),
             # ME.MinkowskiBatchNorm(512),
             # ME.MinkowskiReLU(inplace=True),
-            ME.MinkowskiDropout(0.1),  # 마지막에만 최소 dropout
+            # ME.MinkowskiDropout(0.1),
         )
 
         self.global_pool = ME.MinkowskiGlobalAvgPooling()
@@ -60,7 +63,7 @@ class RewardModelMinkowski(nn.Module):
         self.classifier = nn.Sequential(
             nn.Linear(latent_dim * 2, 256),
             nn.ReLU(),
-            nn.Dropout(0.1),
+            nn.Dropout(0.3),
             nn.Linear(256, 1),
             # nn.ReLU(),
             # nn.Dropout(0.1),
