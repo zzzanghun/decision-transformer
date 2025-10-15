@@ -286,16 +286,20 @@ class TrajectoryDataset(Dataset):
 
         # 데이터 증강이 활성화된 경우, 랜덤하게 증강 타입 선택
         if self.use_augmentation:
-            aug_type = np.random.choice(['original', 'dropping', 'add_noise'])
+            aug_type = np.random.choice(['original', 'rotate_left_90', 'rotate_right_90', 'flip_vertical', 'flip_horizontal'])
 
-            if aug_type == 'dropping':
-                # 0.2 확률로 각 요소를 0으로 변경
-                drop_mask = np.random.random(obs_observation.shape) < 0.2
-                obs_observation[drop_mask] = 0
-            elif aug_type == 'add_noise':
-                # 0.2 확률로 각 요소를 1로 변경
-                add_mask = np.random.random(obs_observation.shape) < 0.2
-                obs_observation[add_mask] = 1
+            if aug_type == 'rotate_left_90':
+                # 왼쪽으로 90도 회전 (반시계방향)
+                obs_observation = np.rot90(obs_observation, k=1)
+            elif aug_type == 'rotate_right_90':
+                # 오른쪽으로 90도 회전 (시계방향)
+                obs_observation = np.rot90(obs_observation, k=-1)
+            elif aug_type == 'flip_vertical':
+                # 상하 반전
+                obs_observation = np.flipud(obs_observation)
+            elif aug_type == 'flip_horizontal':
+                # 좌우 반전
+                obs_observation = np.fliplr(obs_observation)
             # 'original'인 경우 그대로 사용
 
         # MinkowskiEngine용 전처리
