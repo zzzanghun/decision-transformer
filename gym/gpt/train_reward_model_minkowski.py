@@ -364,7 +364,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
     return train_dataloader, val_dataloader
 
 
-def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, weight_decay=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10, wandb_name=None):
+def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4, weight_decay=1e-5, use_l1_regularization=False, use_l2_regularization=True, warmup_epochs=10, wandb_name=None, pos_weight=None):
     """
     이진 분류 모델 학습 함수 (0: 안전, 1: 효율)
 
@@ -384,11 +384,18 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
         L1 정규화 강도
     warmup_epochs : int
         Warmup 에폭 수
+    pos_weight : torch.Tensor or None
+        클래스 1에 대한 가중치 (불균형 데이터 처리용)
     """
     model.to(device)
 
     # 손실 함수 - Binary Cross Entropy with Logits (더 안정적)
-    criterion = nn.BCEWithLogitsLoss()
+    # pos_weight를 설정하여 클래스 불균형 처리
+    if pos_weight is not None:
+        pos_weight = pos_weight.to(device)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+    else:
+        criterion = nn.BCEWithLogitsLoss()
 
     # 옵티마이저 설정 - AdamW 사용 (더 나은 정규화)
     if use_l2_regularization:
@@ -639,6 +646,17 @@ if __name__ == '__main__':
 
     lr = 1e-6
 
+    # 클래스 불균형 처리를 위한 pos_weight 계산
+    # pos_weight = (0의 개수) / (1의 개수)
+    # 현재 비율이 3:7 (0:1) 이므로 pos_weight = 3/7 = 0.4286
+    # 하지만 BCEWithLogitsLoss는 클래스 1에 대한 가중치를 요구하므로
+    # 클래스 0이 소수 클래스라면 pos_weight = 7/3 = 2.333
+    pos_weight_value = train_ones / train_zeros  # 1의 개수 / 0의 개수
+    pos_weight = torch.tensor([pos_weight_value], dtype=torch.float32)
+    print(f"\n클래스 가중치 설정:")
+    print(f"pos_weight (클래스 1에 대한 가중치): {pos_weight_value:.4f}")
+    print(f"이는 클래스 0이 클래스 1보다 {pos_weight_value:.2f}배 더 중요하게 취급됨을 의미합니다.\n")
+
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
         reward_model,
@@ -650,5 +668,6 @@ if __name__ == '__main__':
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
         warmup_epochs=500,  # Warmup 추가
-        wandb_name=f"lr={lr}"
+        wandb_name=f"lr={lr}",
+        pos_weight=pos_weight  # 클래스 가중치 추가
     )
