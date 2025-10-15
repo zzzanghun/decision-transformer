@@ -449,9 +449,9 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
 
     # 옵티마이저 설정 - AdamW 사용 (더 나은 정규화)
     if use_l2_regularization:
-        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
+        optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
     else:
-        optimizer = optim.AdamW(model.get_trainable_parameters(), lr=lr, betas=(0.9, 0.999))
+        optimizer = optim.AdamW(model.parameters(), lr=lr, betas=(0.9, 0.999))
 
     # 학습률 스케줄러 - Cosine Annealing with Warmup
     scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
