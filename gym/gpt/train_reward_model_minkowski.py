@@ -700,7 +700,6 @@ if __name__ == '__main__':
     pos_weight = torch.tensor([pos_weight_value], dtype=torch.float32)
     print(f"\n클래스 가중치 설정:")
     print(f"pos_weight (클래스 1에 대한 가중치): {pos_weight_value:.4f}")
-    print(f"클래스 0 개수: {train_zeros:,}, 클래스 1 개수: {train_ones:,}\n")
 
     # 모델 학습 - 최적화된 하이퍼파라미터
     train_losses, val_losses = train_reward_model(
