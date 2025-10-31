@@ -17,7 +17,9 @@ PROJECT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_PATH)
 print(f"프로젝트 경로: {PROJECT_PATH}")
 
-from gpt.model_minkowski import RewardModelMinkowski
+filter_cnt = 0
+# from gpt.model_minkowski import RewardModelMinkowski
+from gpt.model_drone_info_minkowski import RewardModelMinkowski
 # from gpt.get_reward_from_gpt import reconstruct_from_runlength
 
 # 시드 설정
@@ -36,7 +38,39 @@ np.set_printoptions(threshold=np.inf, linewidth=10000)  # 무한대 대신 큰 �
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"사용 장치: {device}")
 
+RED = "\033[31m"
+BLUE  = "\033[34m"
+RESET = "\033[0m"
+def render_obs_observation(obs_observation: np.ndarray, center=(50, 50), invert_y=True):
+    """
+    obs_observation: (H,W) = (100,100) numpy array
+      -1.0 : 예측 궤적 (빨간색 *)
+       1.0 : 장애물   (빨간색 #)
+       else: 0        (.)
+    center: 중앙 표식 좌표 (x,y) -> '@'로 표시
+    invert_y: True면 y=높은 값이 위로 오도록 그려서 '지도처럼' 보이게 함
+    """
+    H, W = obs_observation.shape
+    ys = range(H-1, -1, -1) if invert_y else range(H)
 
+    lines = []
+    for y in ys:
+        row_cells = []
+        for x in range(W):
+            if (x, y) == center:
+                cell = "@ "                       # 중앙은 최우선
+            else:
+                v = obs_observation[x, y]
+                if v == -1.0:
+                    cell = f"{BLUE}*{RESET} "      # 예측 궤적
+                elif v >= 0.5:                    # 장애물(1.0 가정)
+                    cell = f"{RED}#{RESET} "
+                else:
+                    cell = ". "
+            row_cells.append(cell)
+        lines.append("".join(row_cells))
+    print("\n".join(lines)) 
+    
 def preprocessing_obs_for_minkowski_2d(obs_observation):
     """
     2D observation을 MinkowskiEngine에서 사용할 수 있는 형식으로 전처리
@@ -163,6 +197,7 @@ class TrajectoryDataset(Dataset):
         self._load_data(dataset_path)
     
     def _load_data(self, dataset_path):
+        global filter_cnt
         """
         데이터셋을 로드하고 전처리합니다.
         """
@@ -198,8 +233,9 @@ class TrajectoryDataset(Dataset):
                     trajectories += pickle.load(f)
 
         # Define the indices of the actions to be used
-        action_indices = [0, 1, 2, 6, 7, 8]
-
+        action_indices = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]
+        NEI8_X = np.array([49, 50, 51, 49, 51, 49, 50, 51], dtype=np.int32)
+        NEI8_Y = np.array([49, 49, 49, 50, 50, 51, 51, 51], dtype=np.int32)
         print(f"trajectories 길이: {len(trajectories)}")
 
         print(trajectories[0]['trajectory'].keys())
@@ -209,6 +245,8 @@ class TrajectoryDataset(Dataset):
             episode['actions'] = episode['actions'][:, action_indices]
 
             for j in range(len(episode['actions'])):
+                if j > len(episode['actions']) - 10:
+                    continue
                 v_x = (episode['observations'][j][:, 100*100*10 + 4] * 1.5)[0]
                 v_y = (episode['observations'][j][:, 100*100*10 + 5] * 1.5)[0]
                 a_x = (episode['observations'][j][:, 100*100*10 + 10] * 8.0)[0]
@@ -216,7 +254,7 @@ class TrajectoryDataset(Dataset):
 
                 coef = episode['actions'][j]
 
-                a5, a4, a3, b5, b4, b3 = coef
+                a5, a4, a3, a2, a1, b5, b4, b3, b2, b1 = coef
 
                 drone_info_observation = []
 
@@ -226,10 +264,10 @@ class TrajectoryDataset(Dataset):
                 if norm != 0:
                     direction_vector = direction_vector / norm
 
-                drone_info_observation.append(direction_vector[0][0])
-                drone_info_observation.append(direction_vector[0][1])
-                drone_info_observation.append(v_x)
-                drone_info_observation.append(v_y)
+                # drone_info_observation.append(direction_vector[0][0])
+                # drone_info_observation.append(direction_vector[0][1])
+                # drone_info_observation.append(v_x)
+                # drone_info_observation.append(v_y)
 
                 obs_observation = episode['observations'][j][:, :100*100*10].reshape(100, 100, 10)
                 obs_observation = np.max(obs_observation, axis=2)
@@ -239,26 +277,45 @@ class TrajectoryDataset(Dataset):
 
                 x0, y0 = 5, 5
 
-                t_values = np.arange(0, 1.0 + 0.1, 0.1)
+                t_values = np.arange(0, 2.0 + 0.1, 0.1)
+                check_traj_in_obs = False
                 for t in t_values:
-                    x = x0 + v_x * t + 0.5 * a_x * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
-                    y = y0 + v_y * t + 0.5 * a_y * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
+                    x = x0 + a1 * t + a2 * t**2 + a3 * t**3 + a4 * t**4 + a5 * t**5
+                    y = y0 + b1 * t + b2 * t**2 + b3 * t**3 + b4 * t**4 + b5 * t**5
+
+                    vx = a1 + 2 * a2 * t + 3 * a3 * t**2 + 4 * a4 * t**3 + 5 * a5 * t**4
+                    vy = b1 + 2 * b2 * t + 3 * b3 * t**2 + 4 * b4 * t**3 + 5 * b5 * t**4
 
                     ix = int(round(50 + (x - x0) * 10))
                     iy = int(round(50 + (y - y0) * 10))
                     if 0 <= ix < 100 and 0 <= iy < 100:
-                        obs_observation[iy, ix] = -1.0  # NumPy array는 [row, col] = [y, x] 순서
+                        if obs_observation[ix, iy] >= 0.5:
+                            check_traj_in_obs = True
+                            # break
+                        obs_observation[ix, iy] = -1.0  # NumPy array는 [row, col] = [y, x] 순서
 
-                    traj_x = 50 + (x - x0) * 10
-                    traj_y = 50 + (y - y0) * 10
+                    traj_x = (x * 10)
+                    traj_y = (y * 10)
                     drone_info_observation.append(traj_x / 50.0)
                     drone_info_observation.append(traj_y / 50.0)
+                    drone_info_observation.append(vx)
+                    drone_info_observation.append(vy)
 
                 rtg_value = episode['rtg'][j]
 
                 if int(rtg_value) not in [0, 1]:
                     continue
 
+                if int(rtg_value) == 1 and (obs_observation[NEI8_Y, NEI8_X] >= 0.5).any():
+                    filter_cnt+=1
+                    continue            
+
+                if int(rtg_value) == 1 and check_traj_in_obs:
+                    filter_cnt+=1
+                    continue
+                
+                # render_obs_observation(obs_observation, center=(50, 50), invert_y=False)  # For debugging
+                # breakpoint()
                 drone_info_observation = np.array(drone_info_observation)
 
                 # 원본 데이터만 저장 (증강은 __getitem__에서 동적으로 적용)
@@ -271,7 +328,8 @@ class TrajectoryDataset(Dataset):
         #     'obs': self.obs_data,
         #     'rtg': self.rtg_data
         # }
-        
+
+    
     def __len__(self):
         return len(self.drone_info_data)
 
@@ -391,7 +449,7 @@ def get_dataloader(batch_size=32, shuffle=True, train_ratio=0.8, load_data=False
     """
     # 데이터셋을 한 번만 로드 (증강은 나중에 설정)
     dataset = TrajectoryDataset(load_data=load_data, use_augmentation=False)
-
+    
     # 학습/검증 데이터 분할
     train_size = int(train_ratio * len(dataset))
     val_size = len(dataset) - train_size
@@ -519,7 +577,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
             optimizer.step()
 
             # 정확도 계산
-            predictions = (torch.sigmoid(logits) > 0.5).float()
+            predictions = (torch.sigmoid(logits) > 0.8).float()
             train_correct += (predictions == target_rtg).sum().item()
             train_total += target_rtg.size(0)
 
@@ -557,7 +615,7 @@ def train_reward_model(model, train_loader, val_loader, epochs=1000000, lr=3e-4,
                 loss = criterion(logits, target_rtg)
 
                 # 정확도 계산
-                predictions = (torch.sigmoid(logits) > 0.5).float()
+                predictions = (torch.sigmoid(logits) > 0.8).float()
                 val_correct += (predictions == target_rtg).sum().item()
                 val_total += target_rtg.size(0)
 
@@ -633,7 +691,7 @@ if __name__ == '__main__':
         batch_size=128,
         train_ratio=0.8,
         load_data=False,
-        use_augmentation=True
+        use_augmentation=False
     )
 
     sample_batch = next(iter(train_dataloader))
@@ -646,7 +704,7 @@ if __name__ == '__main__':
     print(f"전체 데이터셋 크기: {total_dataset_size:,}")
     print(f"Train 데이터셋 크기: {len(train_dataloader.dataset):,}")
     print(f"Val 데이터셋 크기: {len(val_dataloader.dataset):,}")
-
+    print(f"필터 카운트: {filter_cnt}")
     # Train 데이터셋의 RTG 분포 계산
     train_rtg_values = []
     for batch in train_dataloader:
@@ -687,11 +745,33 @@ if __name__ == '__main__':
     # 모델 생성 - latent_dim 증가로 표현력 향상
     reward_model = RewardModelMinkowski(drone_info_dim=drone_info_dim, latent_dim=128)
 
+    # reward_model.encoder를 저장된 특정 모델의 .encoder로 load
+    # 파일 경로는 예시로 './minkowski_encoder.pth'로 가정합니다. 필요시 경로 수정하세요.
+    encoder_checkpoint_path = '/home/link/git/decision-transformer/gym/model/minkowski_reward_model_lr_lr=1e-05, only grid_filter_warmup-10_no_last_10/reward_model_best.pth'
+    if os.path.isfile(encoder_checkpoint_path):
+        encoder_state_dict = torch.load(encoder_checkpoint_path, map_location=device)
+        # encoder만 저장한 경우 (state_dict에 key들이 encoder. 없이 시작)
+        try:
+            reward_model.encoder.load_state_dict(encoder_state_dict)
+            print(f"encoder checkpoint를 성공적으로 로드하였습니다: {encoder_checkpoint_path}")
+        except RuntimeError:
+            filtered_state_dict = {
+                k.replace('encoder.', ''): v for k, v in encoder_state_dict.items() if k.startswith('encoder.')
+            }
+            reward_model.encoder.load_state_dict(filtered_state_dict)
+            # # reward_model.encoder의 파라미터를 동결 (freeze)
+            # for param in reward_model.encoder.parameters():
+            #     param.requires_grad = False
+            print(f"전체 모델 체크포인트에서 encoder만 필터링하여 로드하였습니다: {encoder_checkpoint_path}")
+    else:
+        print(f"encoder 체크포인트 파일이 존재하지 않습니다: {encoder_checkpoint_path}")
+
     # 모델 파라미터 수 출력
     total_params = sum(p.numel() for p in reward_model.parameters())
     trainable_params = sum(p.numel() for p in reward_model.parameters() if p.requires_grad)
     print(f"총 파라미터 수: {total_params:,}")
     print(f"학습 가능한 파라미터 수: {trainable_params:,}")
+
 
     lr = 1e-5
 
@@ -716,6 +796,6 @@ if __name__ == '__main__':
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
         warmup_epochs=10,  # Warmup 추가
-        wandb_name=f"lr={lr}",
-        pos_weight=pos_weight  # 클래스 가중치 추가
+        wandb_name=f"lr={lr}, grid-drone-info_filter_warmup-10_no_last_10_load-encoder_tuning_t_values=2.0_vx_vy_sigmoid_threshold=0.8",
+        pos_weight=None # 클래스 가중치 추가
     )
