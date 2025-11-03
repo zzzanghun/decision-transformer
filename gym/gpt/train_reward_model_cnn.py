@@ -314,13 +314,23 @@ class TrajectoryDataset(Dataset):
                 if int(rtg_value) not in [0, 1]:
                     continue
 
-                if int(rtg_value) == 1 and (obs_observation[NEI8_Y, NEI8_X] >= 0.5).any():
-                    filter_cnt+=1
-                    continue            
+                # if int(rtg_value) == 1 and (obs_observation[NEI8_Y, NEI8_X] >= 0.5).any():
+                #     filter_cnt+=1
+                #     continue            
 
                 if int(rtg_value) == 1 and check_traj_in_obs:
                     filter_cnt+=1
                     continue
+
+                SAFETY_MARGIN = 2
+                if int(rtg_value) == 1:
+                    traj_coords = np.argwhere(obs_observation == -1.0)
+                    obs_coords = np.argwhere(obs_observation >= 0.5)
+                    if len(traj_coords) > 0 and len(obs_coords) > 0:
+                        min_dist = np.min(np.linalg.norm(traj_coords[:, None] - obs_coords[None, :], axis=2))
+                        if min_dist < SAFETY_MARGIN:
+                            filter_cnt += 1
+                            continue
                 
                 # render_obs_observation(obs_observation, center=(50, 50), invert_y=False)  # For debugging
                 # breakpoint()
