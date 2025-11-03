@@ -19,7 +19,7 @@ print(f"프로젝트 경로: {PROJECT_PATH}")
 
 filter_cnt = 0
 # from gpt.model_minkowski import RewardModelMinkowski
-from gpt.model_cnn import RewardModelMinkowski
+from gpt.model_cnn_attention import RewardModelMinkowski
 # from gpt.get_reward_from_gpt import reconstruct_from_runlength
 
 # 시드 설정
@@ -314,21 +314,31 @@ class TrajectoryDataset(Dataset):
                 if int(rtg_value) not in [0, 1]:
                     continue
 
-                # if int(rtg_value) == 1 and (obs_observation[NEI8_Y, NEI8_X] >= 0.5).any():
-                #     filter_cnt+=1
-                #     continue            
+                if int(rtg_value) == 0 and (obs_observation[NEI8_Y, NEI8_X] >= 0.5).any():
+                    filter_cnt+=1
+                    continue
 
-                if int(rtg_value) == 1 and check_traj_in_obs:
+                if int(rtg_value) == 0 and check_traj_in_obs:
                     filter_cnt+=1
                     continue
 
                 SAFETY_MARGIN = 2
-                if int(rtg_value) == 1:
+                if int(rtg_value) == 0:
                     traj_coords = np.argwhere(obs_observation == -1.0)
                     obs_coords = np.argwhere(obs_observation >= 0.5)
                     if len(traj_coords) > 0 and len(obs_coords) > 0:
                         min_dist = np.min(np.linalg.norm(traj_coords[:, None] - obs_coords[None, :], axis=2))
                         if min_dist < SAFETY_MARGIN:
+                            filter_cnt += 1
+                            continue
+
+                EFFICIENCY_MARGIN = 15
+                if int(rtg_value) == 1:
+                    traj_coords = np.argwhere(obs_observation == -1.0)
+                    obs_coords = np.argwhere(obs_observation >= 0.5)
+                    if len(traj_coords) > 0 and len(obs_coords) > 0:
+                        min_dist = np.min(np.linalg.norm(traj_coords[:, None] - obs_coords[None, :], axis=2))
+                        if min_dist > EFFICIENCY_MARGIN:
                             filter_cnt += 1
                             continue
                 
@@ -763,24 +773,24 @@ if __name__ == '__main__':
 
     # reward_model.encoder를 저장된 특정 모델의 .encoder로 load
     # 파일 경로는 예시로 './minkowski_encoder.pth'로 가정합니다. 필요시 경로 수정하세요.
-    encoder_checkpoint_path = '/home/link/git/decision-transformer/gym/model/minkowski_reward_model_lr_lr=1e-05, grid_only_cnn_filter/reward_model_best.pth'
-    if os.path.isfile(encoder_checkpoint_path):
-        encoder_state_dict = torch.load(encoder_checkpoint_path, map_location=device)
-        # encoder만 저장한 경우 (state_dict에 key들이 encoder. 없이 시작)
-        try:
-            reward_model.encoder.load_state_dict(encoder_state_dict)
-            print(f"encoder checkpoint를 성공적으로 로드하였습니다: {encoder_checkpoint_path}")
-        except RuntimeError:
-            filtered_state_dict = {
-                k.replace('encoder.', ''): v for k, v in encoder_state_dict.items() if k.startswith('encoder.')
-            }
-            reward_model.encoder.load_state_dict(filtered_state_dict)
-            # # reward_model.encoder의 파라미터를 동결 (freeze)
-            # for param in reward_model.encoder.parameters():
-            #     param.requires_grad = False
-            print(f"전체 모델 체크포인트에서 encoder만 필터링하여 로드하였습니다: {encoder_checkpoint_path}")
-    else:
-        print(f"encoder 체크포인트 파일이 존재하지 않습니다: {encoder_checkpoint_path}")
+    # encoder_checkpoint_path = '/home/link/git/decision-transformer/gym/model/minkowski_reward_model_lr_lr=1e-05, grid_only_cnn_filter/reward_model_best.pth'
+    # if os.path.isfile(encoder_checkpoint_path):
+    #     encoder_state_dict = torch.load(encoder_checkpoint_path, map_location=device)
+    #     # encoder만 저장한 경우 (state_dict에 key들이 encoder. 없이 시작)
+    #     try:
+    #         reward_model.encoder.load_state_dict(encoder_state_dict)
+    #         print(f"encoder checkpoint를 성공적으로 로드하였습니다: {encoder_checkpoint_path}")
+    #     except RuntimeError:
+    #         filtered_state_dict = {
+    #             k.replace('encoder.', ''): v for k, v in encoder_state_dict.items() if k.startswith('encoder.')
+    #         }
+    #         reward_model.encoder.load_state_dict(filtered_state_dict)
+    #         # # reward_model.encoder의 파라미터를 동결 (freeze)
+    #         # for param in reward_model.encoder.parameters():
+    #         #     param.requires_grad = False
+    #         print(f"전체 모델 체크포인트에서 encoder만 필터링하여 로드하였습니다: {encoder_checkpoint_path}")
+    # else:
+    #     print(f"encoder 체크포인트 파일이 존재하지 않습니다: {encoder_checkpoint_path}")
 
     # 모델 파라미터 수 출력
     total_params = sum(p.numel() for p in reward_model.parameters())
@@ -812,6 +822,6 @@ if __name__ == '__main__':
         use_l1_regularization=False,  # L2만 사용
         use_l2_regularization=True,
         warmup_epochs=10,  # Warmup 추가
-        wandb_name=f"lr={lr}, grid_only_cnn_filter",
-        pos_weight=torch.tensor(0.8) # 클래스 가중치 추가
+        wandb_name=f"lr={lr}, grid_only_cnn_attention_new_filter",
+        pos_weight=None # 클래스 가중치 추가
     )
