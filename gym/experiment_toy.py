@@ -73,7 +73,7 @@ def experiment(
         exp_prefix,
         variant,
 ):
-    device = variant.get('device', 'cuda')
+    device = variant.get('device', 'cpu')
     log_to_wandb = variant.get('log_to_wandb', False)
     get_batch_random = variant.get('get_batch_random', False)
     get_batch_action_sum = variant.get('get_batch_action_sum', False)
@@ -388,7 +388,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_eval_episodes', type=int, default=100)
     parser.add_argument('--max_iters', type=int, default=500000)
     parser.add_argument('--num_steps_per_iter', type=int, default=10)
-    parser.add_argument('--device', type=str, default='cuda')
+    parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--log_to_wandb', '-w', type=bool, default=True)
     parser.add_argument('--get_batch_random', type=bool, default=False)
     parser.add_argument('--get_batch_action_sum', type=bool, default=True)

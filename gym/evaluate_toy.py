@@ -6,13 +6,14 @@ import matplotlib.gridspec as gridspec
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from decision_transformer.models.decision_transformer_toy import DecisionTransformer
+from decision_transformer.models.decision_transformer_dt import DecisionTransformerDT
 
 def evaluate_episode(
         state_dim,
         act_dim,
         model,
         max_ep_len=1000,
-        device='cuda',
+        device='cpu',
         target_return=None,
         mode='normal',
         state_mean=0.,
@@ -72,7 +73,7 @@ def evaluate_episode(
 def evaluate_episode_rtg(
         model,
         max_ep_len=1000,
-        device='cuda',
+        device='cpu',
         target_return=None,
         mode='noise',
     ):
@@ -171,31 +172,61 @@ if __name__ == "__main__":
         resid_pdrop=0.0,
         attn_pdrop=0.0,
     )
+    model_dt = DecisionTransformerDT(
+        state_dim=1,
+        act_dim=1,
+        max_length=10,
+        max_ep_len=1000,
+        hidden_size=64,
+        n_layer=1,
+        n_head=1,
+        n_inner=4*64,
+        activation_function='relu',
+        n_positions=1024,
+        resid_pdrop=0.0,
+        attn_pdrop=0.0,
+    )
 
     model.load_state_dict(torch.load(f"/workspace/model/fm/5000_1.837492e-01/dt_fm_model.pth"), strict=False)
+    model_dt.load_state_dict(torch.load(f"/workspace/model/3d_end-to-end/5000_8.154801e-03/only_dt_model.pth"), strict=False)
 
     # 0~100까지의 grid 카운트 배열 초기화
     state_counts = np.zeros(101)  # 0~100까지 101개
+    state_counts_dt = np.zeros(101)
     
     success = 0
+    success_dt = 0
     false = 0
+    false_dt = 0
     iter_num = 30
     final_episode_length = []
+    final_episode_length_dt = []
     for i in range(iter_num):
         success_i, false_i, visited_states, total_episode_lengths = evaluate_episode_rtg(model, target_return=1)
+        success_dt_i, false_dt_i, visited_states_dt, total_episode_lengths_dt = evaluate_episode_rtg(model_dt, target_return=1)
         success += success_i
         false += false_i
+        success_dt += success_dt_i
+        false_dt += false_dt_i
         final_episode_length.append(total_episode_lengths[-1])
+        final_episode_length_dt.append(total_episode_lengths_dt[-1])
         
         # 방문한 상태들을 카운트
         for state in visited_states:
             if 0 <= state <= 100:  # 범위 체크
                 state_counts[state] += 1
+        for state in visited_states_dt:
+            if 0 <= state <= 100:  # 범위 체크
+                state_counts_dt[state] += 1
     state_counts[0] += iter_num
+    state_counts_dt[0] += iter_num
 
     print(f"Success: {success}, False: {false}")
     print(f"Success rate: {success / (success + false)}")
     print(f"Average episode length: {np.mean(final_episode_length)}")
+    print(f"Success_dt: {success_dt}, False_dt: {false_dt}")
+    print(f"Success rate_dt: {success_dt / (success_dt + false_dt)}")
+    print(f"Average episode length_dt: {np.mean(final_episode_length_dt)}")
 
     # 논문용 그래프 설정
     plt.rcParams.update({
@@ -217,17 +248,21 @@ if __name__ == "__main__":
     
     # 1D 히트맵 (바 차트)
     ax1 = plt.subplot(gs[0])
-    bars = plt.bar(range(101), state_counts, color='steelblue', alpha=0.8, edgecolor='black', linewidth=0.5)
-    plt.ylabel('Visit Count', fontsize=20)
+    # bars = plt.bar(range(101), state_counts, color='steelblue', alpha=0.8, edgecolor='black', linewidth=0.5)
+    bars1 = ax1.bar(range(101), state_counts, color='purple', alpha=0.6, edgecolor='black', linewidth=0.5, label='Decision Transformer + Flow Matching')
+    bars2 = ax1.bar(range(101), state_counts_dt, color='teal', alpha=0.6, edgecolor='black', linewidth=0.5, label='Decision Transformer')
+    plt.ylabel('Visit Count', fontsize=20, fontfamily='serif')
     plt.grid(True, alpha=0.3, linestyle='--')
     
     # x축 레이블 제거 (아래쪽 히트맵에만 표시)
     ax1.set_xticks(range(0, 101, 10))
     ax1.set_xticklabels(range(0, 101, 10))
+    ax1.set_xlabel('State Position', fontsize=20, fontfamily='serif')
 
     ax1.set_ylim(0, YMAX_FIXED)
     ax1.set_yticks(list(range(0, YMAX_FIXED + 1, 25)))
     ax1.set_yticklabels([str(t) for t in range(0, YMAX_FIXED + 1, 25)])
+    ax1.legend(loc='upper left')
     
     # 2D 히트맵 (가로 바 형태)
     ax2 = plt.subplot(gs[1])
@@ -239,11 +274,11 @@ if __name__ == "__main__":
     cax = divider.append_axes("right", size="2%", pad=0.1)
     cbar = plt.colorbar(im, cax=cax, label='Visit Count')
     cbar.ax.tick_params(labelsize=16)
-    cbar.set_label('Visit Count', fontsize=18)
+    cbar.set_label('Visit Count', fontsize=18, fontfamily='serif')
 
     cbar.set_ticks([0, 100, YMAX_FIXED])
     
-    ax2.set_xlabel('State Position', fontsize=20)
+    ax2.set_xlabel('State Position', fontsize=20, fontfamily='serif')
     ax2.set_yticks([])
     
     # x축 레이블 설정
